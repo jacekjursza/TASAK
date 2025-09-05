@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from .app_runner import run_cmd_app
 from .config import load_and_merge_configs
+from .mcp_client import run_mcp_app
 
 
 def main():
@@ -45,8 +46,7 @@ def main():
     if app_type == 'cmd':
         run_cmd_app(app_config, unknown_args)
     elif app_type == 'mcp':
-        print(f"Error: App type 'mcp' is not yet supported.", file=sys.stderr)
-        sys.exit(1)
+        run_mcp_app(app_name, app_config, unknown_args)
     else:
         print(f"Error: Unknown app type '{app_type}' for app '{app_name}'.", file=sys.stderr)
         sys.exit(1)
