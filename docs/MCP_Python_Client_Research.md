@@ -57,23 +57,23 @@ async def basic_client():
         args=["path/to/server.py"],
         env=None  # lub dict ze zmiennymi środowiskowymi
     )
-    
+
     # Połączenie z serwerem
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             # Inicjalizacja sesji
             await session.initialize()
-            
+
             # Lista dostępnych tools
             tools = await session.list_tools()
             print("Available tools:", [t.name for t in tools.tools])
-            
+
             # Wywołanie tool
             result = await session.call_tool(
                 'tool_name',
                 {'param1': 'value1', 'param2': 'value2'}
             )
-            
+
             # Obsługa wyniku
             print("Result:", result.content[0].text)
 
@@ -96,7 +96,7 @@ class MCPClient:
         self.session = None
         self.exit_stack = AsyncExitStack()
         self.logger = logging.getLogger(__name__)
-        
+
     async def connect(self):
         """Establish connection to MCP server"""
         try:
@@ -106,32 +106,32 @@ class MCPClient:
                 args=[self.server_script],
                 env=None
             )
-            
+
             # Utwórz transport
             self.read, self.write = await self.exit_stack.enter_async_context(
                 stdio_client(server_params)
             )
-            
+
             # Utwórz sesję
             self.session = await self.exit_stack.enter_async_context(
                 ClientSession(self.read, self.write)
             )
-            
+
             # Inicjalizuj
             await self.session.initialize()
-            
+
             self.logger.info(f"Connected to server: {self.server_script}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Connection failed: {e}")
             return False
-    
+
     async def list_tools(self):
         """Get available tools from server"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         response = await self.session.list_tools()
         return [
             {
@@ -141,18 +141,18 @@ class MCPClient:
             }
             for tool in response.tools
         ]
-    
+
     async def call_tool(self, tool_name: str, arguments: dict = None):
         """Call a specific tool with arguments"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         try:
             result = await self.session.call_tool(
-                tool_name, 
+                tool_name,
                 arguments or {}
             )
-            
+
             # Parse response
             if result.content and len(result.content) > 0:
                 content = result.content[0]
@@ -161,16 +161,16 @@ class MCPClient:
                 elif hasattr(content, 'data'):
                     return content.data
             return None
-            
+
         except Exception as e:
             self.logger.error(f"Tool call failed: {e}")
             raise
-    
+
     async def list_resources(self):
         """Get available resources from server"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         response = await self.session.list_resources()
         return [
             {
@@ -180,22 +180,22 @@ class MCPClient:
             }
             for resource in response.resources
         ]
-    
+
     async def read_resource(self, uri: str):
         """Read a specific resource"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         result = await self.session.read_resource(uri)
         if result.content and len(result.content) > 0:
             return result.content[0].text
         return None
-    
+
     async def list_prompts(self):
         """Get available prompts from server"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         response = await self.session.list_prompts()
         return [
             {
@@ -205,21 +205,21 @@ class MCPClient:
             }
             for prompt in response.prompts
         ]
-    
+
     async def get_prompt(self, prompt_name: str, arguments: dict = None):
         """Get a specific prompt with arguments"""
         if not self.session:
             raise RuntimeError("Not connected to server")
-            
+
         result = await self.session.get_prompt(
             prompt_name,
             arguments or {}
         )
-        
+
         if result.messages:
             return result.messages
         return None
-    
+
     async def disconnect(self):
         """Close connection to server"""
         await self.exit_stack.aclose()
@@ -228,24 +228,24 @@ class MCPClient:
 # Użycie
 async def main():
     client = MCPClient("path/to/weather_server.py")
-    
+
     # Połącz
     if await client.connect():
         # Lista tools
         tools = await client.list_tools()
         print(f"Available tools: {tools}")
-        
+
         # Wywołaj tool
         weather = await client.call_tool(
             'get_weather',
             {'city': 'Warsaw', 'units': 'metric'}
         )
         print(f"Weather: {weather}")
-        
+
         # Lista resources
         resources = await client.list_resources()
         print(f"Resources: {resources}")
-        
+
         # Rozłącz
         await client.disconnect()
 
@@ -270,24 +270,24 @@ class MCPWithClaude:
         self.mcp_server = mcp_server
         self.anthropic = Anthropic(api_key=anthropic_api_key)
         self.session = None
-        
+
     async def connect_mcp(self):
         """Connect to MCP server"""
         server_params = StdioServerParameters(
             command="python",
             args=[self.mcp_server]
         )
-        
+
         self.read, self.write = await stdio_client(server_params).__aenter__()
         self.session = await ClientSession(self.read, self.write).__aenter__()
         await self.session.initialize()
-        
+
     async def query_with_tools(self, user_query: str):
         """Process query using Claude and MCP tools"""
-        
+
         # Get available tools
         tools_response = await self.session.list_tools()
-        
+
         # Convert MCP tools to Claude format
         claude_tools = []
         for tool in tools_response.tools:
@@ -296,20 +296,20 @@ class MCPWithClaude:
                 "description": tool.description,
                 "input_schema": tool.inputSchema
             })
-        
+
         # Send query to Claude
         messages = [{"role": "user", "content": user_query}]
-        
+
         response = self.anthropic.messages.create(
             model="claude-3-5-sonnet-20241022",
             messages=messages,
             tools=claude_tools,
             max_tokens=1000
         )
-        
+
         # Process tool calls
         final_response = []
-        
+
         for block in response.content:
             if block.type == "tool_use":
                 # Execute tool via MCP
@@ -317,13 +317,13 @@ class MCPWithClaude:
                     block.name,
                     block.input
                 )
-                
+
                 # Add to response
                 final_response.append({
                     "tool": block.name,
                     "result": tool_result.content[0].text
                 })
-                
+
                 # Continue conversation with tool results
                 messages.append({
                     "role": "assistant",
@@ -337,14 +337,14 @@ class MCPWithClaude:
                         "content": tool_result.content[0].text
                     }]
                 })
-                
+
         # Get final response from Claude
         final_claude_response = self.anthropic.messages.create(
             model="claude-3-5-sonnet-20241022",
             messages=messages,
             max_tokens=1000
         )
-        
+
         return final_claude_response.content[0].text
 
 # Użycie
@@ -353,13 +353,13 @@ async def main():
         "weather_server.py",
         "your-anthropic-api-key"
     )
-    
+
     await client.connect_mcp()
-    
+
     response = await client.query_with_tools(
         "What's the weather like in Warsaw and London?"
     )
-    
+
     print(response)
 
 asyncio.run(main())
@@ -444,11 +444,11 @@ async def test_mcp_client():
             MagicMock(name="test_tool", description="Test")
         ]
     )
-    
+
     # Test
     client = MCPClient("dummy.py")
     client.session = mock_session
-    
+
     tools = await client.list_tools()
     assert len(tools) == 1
     assert tools[0]['name'] == 'test_tool'
@@ -484,7 +484,7 @@ class MCPPool:
         self.clients = []
         for _ in range(pool_size):
             self.clients.append(MCPClient(server))
-    
+
     async def get_client(self):
         # Round-robin lub inna strategia
         return self.clients[self.index % len(self.clients)]

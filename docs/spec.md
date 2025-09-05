@@ -3,9 +3,9 @@
 
 
 ## User Stories -- Personas
-Personas: 
+Personas:
 
-[[1]] Human-Power-User, 
+[[1]] Human-Power-User,
 [[2]] Agent AI z dostępem do command-line
 [[3]] TASAK's technical product owner
 
@@ -27,7 +27,7 @@ szukamy hierarchicznie:
 zasada łącznia:
 
 a) najpierw wczytujemy zawsze <user-home-dir>/.tasak/tasak.yaml
-b) potem skanujemy drzewo konfigów "lokalnych" 
+b) potem skanujemy drzewo konfigów "lokalnych"
 c) "merdżujemy" je po kolei.
 
 "merdżowanie" to:
@@ -35,7 +35,7 @@ c) "merdżujemy" je po kolei.
 - jeśli istniał: nadpisujemy, jesli nie istniał: dokładamy
 
 kolejność merdżowania:
-global -> local root -> local niższy -> local jeszcze niższy 
+global -> local root -> local niższy -> local jeszcze niższy
 
 czyli: ten który jest najbliżej katalogu z którego uruchomiono -> jest "najświeższy"
 
@@ -53,8 +53,8 @@ apps_config:
 app1: (...)
 
 app2: (...)
- 
-app-n: 
+
+app-n:
     name: "<str>"
     type: "cmd"
     meta:
@@ -81,7 +81,7 @@ Typy appsów:
 PRD-001: initial
 Jako [[1]] lub [[3]] chcę na poziomie systemu wykonać komendę
 pip install -e https://github.com/jacekjursza/TASAK    (lub coś podobnego)
-LUB inny one-liner 
+LUB inny one-liner
 
 i od tego momentu mieć dostępną komendę, niezależnie od katalogu
 
@@ -91,7 +91,7 @@ okhan> tasak --help
 AC:
 - aplikacja zainstalowana i dostępna do odpalenia
 - działa polecenie "tasak --help"
-- lokalny katalog /home/okhan/code/tasak podpięty do repozytorium zdalnego https://github.com/jacekjursza/TASAK 
+- lokalny katalog /home/okhan/code/tasak podpięty do repozytorium zdalnego https://github.com/jacekjursza/TASAK
 - wszystkie pliki wypchnięte na github z commitem "initial setup"
 
 
