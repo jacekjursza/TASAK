@@ -5,6 +5,7 @@ from typing import Any, Dict
 from .admin_commands import setup_admin_subparsers, handle_admin_command
 from .app_runner import run_cmd_app
 from .config import load_and_merge_configs
+from .curated_app import run_curated_app
 from .mcp_client import run_mcp_app
 from .mcp_remote_runner import run_mcp_remote_app
 
@@ -84,6 +85,8 @@ def main():
     app_type = app_config.get("type")
     if app_type == "cmd":
         run_cmd_app(app_config, unknown_args)
+    elif app_type == "curated":
+        run_curated_app(app_name, app_config, unknown_args)
     elif app_type == "mcp":
         run_mcp_app(app_name, app_config, unknown_args)
     elif app_type == "mcp-remote":

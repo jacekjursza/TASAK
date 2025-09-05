@@ -29,11 +29,11 @@ MCP (Model Context Protocol) to standardowy protokół umożliwiający LLM-om be
 1. **Resources** - Dane tylko do odczytu (jak GET endpoints)
    - Pliki, dokumenty, dane strukturalne
    - Ładowane do kontekstu LLM
-   
+
 2. **Tools** - Funkcje wykonywalne (jak POST endpoints)
    - Wymagają zgody użytkownika
    - Mogą modyfikować stan systemu
-   
+
 3. **Prompts** - Szablony interakcji
    - Predefiniowane wzorce zapytań
    - Parametryzowane prompty
@@ -129,26 +129,26 @@ _weather_cache = {}
 
 @mcp.tool()
 async def get_weather(
-    city: str, 
+    city: str,
     country_code: str = "US",
     units: str = "metric"
 ) -> str:
     """
     Get current weather for a city.
-    
+
     Args:
         city: City name
         country_code: ISO country code
         units: metric or imperial
     """
     cache_key = f"{city}_{country_code}_{units}"
-    
+
     # Check cache (5 min TTL)
     if cache_key in _weather_cache:
         cached_time, data = _weather_cache[cache_key]
         if time.time() - cached_time < 300:
             return data
-    
+
     # Fetch fresh data
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -159,7 +159,7 @@ async def get_weather(
                 "appid": os.getenv("OPENWEATHER_API_KEY")
             }
         )
-        
+
     if response.status_code == 200:
         data = response.json()
         result = f"""
@@ -179,7 +179,7 @@ Wind: {data['wind']['speed']} m/s
 async def get_forecast(city: str) -> str:
     """Get 5-day forecast as a resource."""
     # Implementation...
-    
+
 if __name__ == "__main__":
     mcp.run()
 ```
@@ -272,12 +272,12 @@ async def process_data(
 ) -> dict:  # Return type też
     """
     Process data file with validation.
-    
+
     Args:
         input_file: Path to input file
         format: Data format (json, csv, xml)
         validate: Whether to validate data
-        
+
     Returns:
         Processing results with statistics
     """
@@ -448,9 +448,9 @@ Claude: [Uses math_tool] → "10! = 3,628,800"
 ### Złożone Workflow
 ```
 User: "Analyze my project structure and create documentation"
-Claude: 
+Claude:
 1. [Uses list_files tool]
-2. [Uses read_file tool for each source file]  
+2. [Uses read_file tool for each source file]
 3. [Uses create_documentation tool]
 → "Documentation created in docs/ folder"
 ```
