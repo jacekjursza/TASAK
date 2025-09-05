@@ -66,13 +66,16 @@ def _do_atlassian_auth():
     )
 
     print("Your browser should open for authentication.")
+    sys.stdout.flush()
     print(f"If it doesn't, please open this URL manually:\n{auth_url}")
+    sys.stdout.flush()
     webbrowser.open(auth_url)
 
     httpd = None
     try:
         with socketserver.TCPServer(("", 8989), OAuthCallbackHandler) as httpd:
             print("\nWaiting for authentication... (Listening on port 8989)")
+            sys.stdout.flush()
             while authorization_code is None:
                 httpd.handle_request()
 
