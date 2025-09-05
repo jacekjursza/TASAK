@@ -1,29 +1,72 @@
 import argparse
+import sys
+from typing import Any, Dict
+
+from .app_runner import run_cmd_app
+from .config import load_and_merge_configs
+
 
 def main():
     """Main entry point for the TASAK application."""
     parser = argparse.ArgumentParser(
         prog="tasak",
-        description="TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents."
+        description="TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents.",
+        epilog="Run 'tasak <app_name> --help' to see help for a specific application."
     )
 
     parser.add_argument(
         "app_name",
         nargs='?',
-        help="The name of the application to run."
+        help="The name of the application to run. If not provided, lists available apps."
     )
 
-    args, unknown = parser.parse_known_args()
+    args, unknown_args = parser.parse_known_args()
+    config = load_and_merge_configs()
 
-    if args.app_name:
-        print(f"Running app: {args.app_name}")
-        # Here we will later dispatch to the correct app runner
-        # For now, just print the app name and any unknown arguments
-        if unknown:
-            print(f"With arguments: {unknown}")
+    if not args.app_name:
+        _list_available_apps(config)
+        return
+
+    app_name = args.app_name
+    apps_config = config.get('apps_config', {})
+    enabled_apps = apps_config.get('enabled_apps', [])
+
+    if app_name not in enabled_apps:
+        print(f"Error: App '{app_name}' is not enabled or does not exist.", file=sys.stderr)
+        _list_available_apps(config)
+        sys.exit(1)
+
+    app_config = config.get(app_name)
+    if not app_config:
+        print(f"Error: Configuration for app '{app_name}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    app_type = app_config.get('type')
+    if app_type == 'cmd':
+        run_cmd_app(app_config, unknown_args)
+    elif app_type == 'mcp':
+        print(f"Error: App type 'mcp' is not yet supported.", file=sys.stderr)
+        sys.exit(1)
     else:
-        # If no app name is provided, print the help message.
-        parser.print_help()
+        print(f"Error: Unknown app type '{app_type}' for app '{app_name}'.", file=sys.stderr)
+        sys.exit(1)
+
+def _list_available_apps(config: Dict[str, Any]):
+    """Lists all enabled applications from the configuration."""
+    print("Available applications:")
+    apps_config = config.get('apps_config', {})
+    enabled_apps = apps_config.get('enabled_apps', [])
+    
+    if not enabled_apps:
+        print("  (No applications enabled in configuration)")
+        return
+
+    for app_name in sorted(enabled_apps):
+        app_info = config.get(app_name, {})
+        app_type = app_info.get('type', 'N/A')
+        app_description = app_info.get('name', 'No description')
+        print(f"  - {app_name:<20} (type: {app_type:<5}) - {app_description}")
+
 
 if __name__ == "__main__":
     main()
