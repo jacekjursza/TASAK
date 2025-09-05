@@ -109,8 +109,12 @@ class MCPRealClient:
                 headers["Authorization"] = f"Bearer {access_token}"
 
         # Run async function in sync context
-        result = asyncio.run(self._call_tool_async(tool_name, arguments, headers))
-        return result
+        try:
+            result = asyncio.run(self._call_tool_async(tool_name, arguments, headers))
+            return result
+        except KeyboardInterrupt:
+            print("\nOperation cancelled by user.", file=sys.stderr)
+            sys.exit(130)  # Standard exit code for SIGINT
 
     def _get_access_token(self) -> Optional[str]:
         """Get access token if authentication is required."""
@@ -207,11 +211,29 @@ class MCPRealClient:
                 print(f"Unsupported transport: {transport}", file=sys.stderr)
                 return []
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, OSError):
+            # Connection-specific errors - server likely not running
             print(
-                f"Error connecting to MCP server or fetching tools: {e}",
+                f"Error: Cannot connect to '{self.app_name}' server.",
                 file=sys.stderr,
             )
+            print("Is the server running?", file=sys.stderr)
+            return []
+        except Exception as e:
+            # Check if it's a TaskGroup error which usually means connection failed
+            error_msg = str(e)
+            if "TaskGroup" in error_msg or "ConnectionRefused" in error_msg.lower():
+                print(
+                    f"Error: Cannot connect to '{self.app_name}' server.",
+                    file=sys.stderr,
+                )
+                print("Is the server running?", file=sys.stderr)
+            else:
+                # Other errors - log more details
+                print(
+                    f"Error fetching tools from '{self.app_name}': {e}",
+                    file=sys.stderr,
+                )
             return []
 
     async def _call_tool_async(
@@ -280,9 +302,27 @@ class MCPRealClient:
             else:
                 return {"error": f"Unsupported transport: {transport}"}
 
+        except (ConnectionError, TimeoutError, OSError):
+            # Connection-specific errors - server likely not running
+            print(
+                f"Error: Cannot connect to '{self.app_name}' server.",
+                file=sys.stderr,
+            )
+            print("Is the server running?", file=sys.stderr)
+            sys.exit(1)
         except Exception as e:
-            print(f"Error calling tool: {e}", file=sys.stderr)
-            return {"error": str(e)}
+            # Check if it's a TaskGroup error which usually means connection failed
+            error_msg = str(e)
+            if "TaskGroup" in error_msg or "ConnectionRefused" in error_msg.lower():
+                print(
+                    f"Error: Cannot connect to '{self.app_name}' server.",
+                    file=sys.stderr,
+                )
+                print("Is the server running?", file=sys.stderr)
+            else:
+                # Other errors
+                print(f"Error executing tool '{tool_name}': {e}", file=sys.stderr)
+            sys.exit(1)
 
     def clear_cache(self):
         """Clear the cache for this app."""

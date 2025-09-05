@@ -27,7 +27,11 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     tool_defs = client.get_tool_definitions()
 
     if not tool_defs:
-        print(f"Error: No tools available for '{app_name}'", file=sys.stderr)
+        print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
+        print("This could mean:", file=sys.stderr)
+        print("  - The server is not running", file=sys.stderr)
+        print("  - The server has no tools exposed", file=sys.stderr)
+        print("  - There's a configuration issue", file=sys.stderr)
         sys.exit(1)
 
     parser = _build_parser(app_name, tool_defs)
@@ -38,15 +42,26 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         sys.exit(1)
 
     tool_name = parsed_args.tool_name
-    tool_args = {k: v for k, v in vars(parsed_args).items() if k != "tool_name"}
+    # Filter out TASAK-specific arguments before passing to MCP server
+    TASAK_FLAGS = {"clear_cache"}  # Add more as needed
+    tool_args = {
+        k: v
+        for k, v in vars(parsed_args).items()
+        if k != "tool_name" and k not in TASAK_FLAGS
+    }
 
     # Call the tool using real MCP client
-    result = client.call_tool(tool_name, tool_args)
+    try:
+        result = client.call_tool(tool_name, tool_args)
 
-    if isinstance(result, dict) or isinstance(result, list):
-        print(json.dumps(result, indent=2))
-    else:
-        print(result)
+        if isinstance(result, dict) or isinstance(result, list):
+            print(json.dumps(result, indent=2))
+        else:
+            print(result)
+    except Exception as e:
+        # This should rarely happen as MCPRealClient handles most errors
+        print(f"Error executing tool: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _get_access_token(app_name: str) -> str:
