@@ -1,12 +1,12 @@
-"""MCP Remote client that communicates through mcp-remote proxy."""
+"""MCP Remote client that communicates through mcp-remote proxy with process pooling."""
 
 import asyncio
 import sys
 from typing import Any, Dict, List
 
-from mcp import ClientSession
-from mcp.client.stdio import stdio_client, StdioServerParameters
 import logging
+
+from .mcp_remote_pool import MCPRemotePool
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
@@ -14,62 +14,51 @@ logger = logging.getLogger(__name__)
 
 
 class MCPRemoteClient:
-    """Client for MCP Remote servers that uses mcp-remote proxy."""
+    """Client for MCP Remote servers using process pool for performance."""
 
     def __init__(self, app_name: str, app_config: Dict[str, Any]):
         self.app_name = app_name
         self.app_config = app_config
         self.meta = app_config.get("meta", {})
         self.server_url = self.meta.get("server_url")
-        self.proxy_process = None
+        self.pool = MCPRemotePool()  # Singleton pool
 
         if not self.server_url:
             raise ValueError(f"No server_url specified for {app_name}")
 
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
-        """Get tool definitions through the proxy."""
+        """Get tool definitions through the pooled proxy."""
         # Run async function in sync context
         return asyncio.run(self._fetch_tools_async())
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
-        """Call a tool through the proxy."""
+        """Call a tool through the pooled proxy."""
         # Run async function in sync context
         return asyncio.run(self._call_tool_async(tool_name, arguments))
 
     async def _fetch_tools_async(self) -> List[Dict[str, Any]]:
-        """Async function to fetch tools through mcp-remote proxy."""
+        """Async function to fetch tools using pooled connection."""
         try:
-            # Start mcp-remote proxy process
-            proxy_cmd = ["npx", "-y", "mcp-remote", self.server_url]
+            # Get session from pool (reuses if available)
+            session = await self.pool.get_session(self.app_name, self.server_url)
 
-            logger.debug(f"Starting mcp-remote proxy: {' '.join(proxy_cmd)}")
+            logger.debug(f"Fetching tools for {self.app_name}")
 
-            # Use StdioServerParameters which expects separate command and args
-            server_params = StdioServerParameters(
-                command="npx",
-                args=["-y", "mcp-remote", self.server_url],
-                env=None,  # Will use current environment
-            )
+            # List available tools
+            tools_result = await session.list_tools()
 
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    await session.initialize()
+            tools = []
+            for tool in tools_result.tools:
+                tools.append(
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema,
+                    }
+                )
 
-                    # List available tools
-                    tools_result = await session.list_tools()
-
-                    tools = []
-                    for tool in tools_result.tools:
-                        tools.append(
-                            {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "input_schema": tool.inputSchema,
-                            }
-                        )
-
-                    return tools
+            logger.info(f"Fetched {len(tools)} tools for {self.app_name}")
+            return tools
 
         except Exception as e:
             print(f"Error fetching tools through mcp-remote: {e}", file=sys.stderr)
@@ -82,33 +71,28 @@ class MCPRemoteClient:
             return []
 
     async def _call_tool_async(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
-        """Async function to call a tool through mcp-remote proxy."""
+        """Async function to call a tool using pooled connection."""
         try:
-            # Start mcp-remote proxy process
-            server_params = StdioServerParameters(
-                command="npx", args=["-y", "mcp-remote", self.server_url], env=None
-            )
+            # Get session from pool (reuses if available)
+            session = await self.pool.get_session(self.app_name, self.server_url)
 
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    await session.initialize()
+            logger.debug(f"Calling tool {tool_name} for {self.app_name}")
 
-                    # Call the tool
-                    result = await session.call_tool(tool_name, arguments)
+            # Call the tool
+            result = await session.call_tool(tool_name, arguments)
 
-                    # Extract the result
-                    if result.content and len(result.content) > 0:
-                        content = result.content[0]
-                        if hasattr(content, "text"):
-                            return content.text
-                        elif hasattr(content, "data"):
-                            return content.data
+            # Extract the result
+            if result.content and len(result.content) > 0:
+                content = result.content[0]
+                if hasattr(content, "text"):
+                    return content.text
+                elif hasattr(content, "data"):
+                    return content.data
 
-                    return {
-                        "status": "success",
-                        "content": f"Tool {tool_name} executed",
-                    }
+            return {
+                "status": "success",
+                "content": f"Tool {tool_name} executed",
+            }
 
         except Exception as e:
             print(f"Error calling tool through mcp-remote: {e}", file=sys.stderr)
