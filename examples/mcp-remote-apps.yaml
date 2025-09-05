@@ -1,0 +1,52 @@
+# Example configuration for MCP-Remote applications
+# These apps use the official mcp-remote proxy for OAuth-protected servers
+
+apps_config:
+  enabled_apps:
+    - atlassian
+    - github
+    - slack
+
+# Atlassian (Jira, Confluence)
+atlassian:
+  name: "Atlassian Suite (Jira & Confluence)"
+  type: "mcp-remote"
+  meta:
+    server_url: "https://mcp.atlassian.com/v1/sse"
+    tools:
+      - "Search and create Jira issues"
+      - "Manage Confluence pages"
+      - "Access project information"
+
+# GitHub
+github:
+  name: "GitHub MCP Server"
+  type: "mcp-remote"
+  meta:
+    server_url: "https://mcp.github.com/v1/sse"
+    tools:
+      - "Search repositories"
+      - "Create issues and PRs"
+      - "Manage workflows"
+
+# Slack
+slack:
+  name: "Slack Workspace"
+  type: "mcp-remote"
+  meta:
+    server_url: "https://mcp.slack.com/v1/sse"
+    tools:
+      - "Send messages"
+      - "Search conversations"
+      - "Manage channels"
+
+# Generic example for custom MCP servers
+custom_mcp:
+  name: "Custom MCP Server"
+  type: "mcp-remote"
+  meta:
+    server_url: "https://your-domain.com/mcp/v1/sse"
+    # Optional: additional arguments for mcp-remote
+    args:
+      - "--verbose"
+      - "--timeout=30"
