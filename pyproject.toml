@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tasak"
+version = "0.1.0"
+authors = [
+  { name="Jacek Jursza", email="jacek@jursza.net" },
+]
+description = "TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "PyYAML==6.0.1",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp-sdk"]
+
+[project.scripts]
+tasak = "tasak.main:main"
+
+[project.urls]
+"Homepage" = "https://github.com/jacekjursza/tasak"
+"Bug Tracker" = "https://github.com/jacekjursza/tasak/issues"
