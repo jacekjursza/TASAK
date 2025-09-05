@@ -5,6 +5,7 @@ from typing import Any, Dict
 from .app_runner import run_cmd_app
 from .config import load_and_merge_configs
 from .mcp_client import run_mcp_app
+from .mcp_remote_runner import run_mcp_remote_app
 
 
 def main():
@@ -64,6 +65,8 @@ def main():
         run_cmd_app(app_config, unknown_args)
     elif app_type == "mcp":
         run_mcp_app(app_name, app_config, unknown_args)
+    elif app_type == "mcp-remote":
+        run_mcp_remote_app(app_name, app_config, unknown_args)
     else:
         print(
             f"Error: Unknown app type '{app_type}' for app '{app_name}'.",
@@ -86,7 +89,7 @@ def _list_available_apps(config: Dict[str, Any]):
         app_info = config.get(app_name, {})
         app_type = app_info.get("type", "N/A")
         app_description = app_info.get("name", "No description")
-        print(f"  - {app_name:<20} (type: {app_type:<5}) - {app_description}")
+        print(f"  - {app_name:<20} (type: {app_type:<10}) - {app_description}")
 
 
 if __name__ == "__main__":
