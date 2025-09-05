@@ -1,0 +1,101 @@
+apps_config:
+  enabled_apps:
+    - dev-workspace
+    - todo-manager
+
+# Example 1: Simple development workspace
+dev-workspace:
+  type: curated
+  name: "Development Workspace Manager"
+  description: "Unified interface for development workflow"
+
+  commands:
+    - name: "start"
+      description: "Start development environment"
+      backend:
+        type: composite
+        steps:
+          - name: "Check Docker"
+            type: cmd
+            command: ["docker", "--version"]
+
+          - name: "List current directory"
+            type: cmd
+            command: ["ls", "-la"]
+
+    - name: "test"
+      description: "Run tests"
+      backend:
+        type: cmd
+        command: ["echo", "Running tests..."]
+
+    - name: "deploy"
+      description: "Deploy to environment"
+      backend:
+        type: conditional
+        condition: "${env}"
+        branches:
+          dev:
+            type: cmd
+            command: ["echo", "Deploying to DEV environment"]
+          prod:
+            type: composite
+            steps:
+              - type: cmd
+                command: ["echo", "Running production checks..."]
+                required: true
+              - type: cmd
+                command: ["echo", "Deploying to PRODUCTION"]
+      params:
+        - name: "--env"
+          required: true
+          choices: ["dev", "prod"]
+          help: "Target environment"
+
+# Example 2: TODO manager with subcommands
+todo-manager:
+  type: curated
+  name: "Unified TODO Manager"
+  description: "Manage tasks across multiple systems"
+
+  commands:
+    - name: "task"
+      description: "Task management"
+      subcommands:
+        - name: "list"
+          description: "List all tasks"
+          backend:
+            type: cmd
+            command: ["echo", "Listing tasks from project: ${project:-all}"]
+          params:
+            - name: "--project"
+              help: "Filter by project name"
+              default: "all"
+
+        - name: "create"
+          description: "Create a new task"
+          backend:
+            type: cmd
+            command: ["echo", "Creating task: ${title} (Priority: ${priority:-medium})"]
+          params:
+            - name: "--title"
+              required: true
+              help: "Task title"
+            - name: "--priority"
+              choices: ["low", "medium", "high"]
+              default: "medium"
+              help: "Task priority"
+
+    - name: "sync"
+      description: "Sync tasks between systems"
+      backend:
+        type: composite
+        steps:
+          - name: "Export local tasks"
+            type: cmd
+            command: ["echo", "Exporting local tasks..."]
+            capture: "local_tasks"
+
+          - name: "Upload to cloud"
+            type: cmd
+            command: ["echo", "Uploading tasks to cloud..."]
