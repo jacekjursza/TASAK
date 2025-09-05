@@ -1,0 +1,30 @@
+apps_config:
+  enabled_apps:
+    - gok
+    - atlassian
+    - auth
+
+gok:
+  name: "GOK - Git of Knowledge"
+  type: "mcp"
+  config: "./gok.json"
+  requires_auth: false
+  # meta:
+  #   mode: "curated"  # Options: proxy, curated, dynamic (default)
+
+atlassian:
+  name: "Atlassian MCP Client (via mcp-remote)"
+  type: "mcp-remote"
+  meta:
+    server_url: "https://mcp.atlassian.com/v1/sse"
+    tools:
+      - "Search Jira issues"
+      - "Create/update tickets"
+      - "Search Confluence pages"
+      - "Manage projects"
+
+auth:
+  name: "Authenticate with a service"
+  type: "cmd"
+  meta:
+    command: ["python", "-m", "tasak.auth"]
