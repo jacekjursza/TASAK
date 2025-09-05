@@ -13,7 +13,6 @@ from urllib.parse import urlparse, parse_qs
 ATLASSIAN_CLIENT_ID = "5Dzgchq9CCu2EIgv"
 ATLASSIAN_AUTH_URL = "https://mcp.atlassian.com/oauth2/authorize"
 ATLASSIAN_TOKEN_URL = "https://mcp.atlassian.com/oauth2/token"
-REDIRECT_URI = "http://localhost:8989"
 AUTH_FILE_PATH = Path.home() / ".tasak" / "auth.json"
 
 # --- Global variable to hold the authorization code ---
@@ -56,10 +55,16 @@ def _do_atlassian_auth():
     """Handles the full OAuth 2.1 flow for Atlassian."""
     # TODO: Check for existing valid token
 
+    # Find a free port for the redirect URI
+    with socketserver.TCPServer(("localhost", 0), None) as s:
+        free_port = s.server_address[1]
+
+    redirect_uri = f"http://localhost:{free_port}"
+
     auth_url = (
         f"{ATLASSIAN_AUTH_URL}?"
         f"client_id={ATLASSIAN_CLIENT_ID}&"
-        f"redirect_uri={REDIRECT_URI}&"
+        f"redirect_uri={redirect_uri}&"
         f"response_type=code&"
         f"scope=offline_access%20read%3Ajira-work%20write%3Ajira-work&"
         f"state=tasak-auth-state"
@@ -73,14 +78,15 @@ def _do_atlassian_auth():
 
     httpd = None
     try:
-        with socketserver.TCPServer(("", 8989), OAuthCallbackHandler) as httpd:
-            print("\nWaiting for authentication... (Listening on port 8989)")
+        socketserver.TCPServer.allow_reuse_address = True
+        with socketserver.TCPServer(("", free_port), OAuthCallbackHandler) as httpd:
+            print(f"\nWaiting for authentication... (Listening on port {free_port})")
             sys.stdout.flush()
             while authorization_code is None:
                 httpd.handle_request()
 
         print("Authorization code received. Exchanging for access token...")
-        _exchange_code_for_token(authorization_code)
+        _exchange_code_for_token(authorization_code, redirect_uri)
 
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
@@ -88,13 +94,13 @@ def _do_atlassian_auth():
             httpd.server_close()
 
 
-def _exchange_code_for_token(code: str):
+def _exchange_code_for_token(code: str, redirect_uri: str):
     """Exchanges the authorization code for an access token and refresh token."""
     payload = {
         "grant_type": "authorization_code",
         "client_id": ATLASSIAN_CLIENT_ID,
         "code": code,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
     }
     response = requests.post(ATLASSIAN_TOKEN_URL, data=payload)
 
