@@ -10,3 +10,4 @@ This wiki provides comprehensive documentation for using, configuring, and devel
 2.  **[Configuration](2.-Configuration.md)**: Understand the powerful hierarchical configuration system.
 3.  **[Using `cmd` Apps](3.-Using-Cmd-Apps.md)**: Expose simple shell commands to your AI agents.
 4.  **[Using `mcp` Apps](4.-Using-Mcp-Apps.md)**: Connect to advanced, AI-native servers with the Model Context Protocol.
+5.  **[Authentication for MCP Apps](5.-Authentication.md)**: How to authenticate with services like Atlassian.
