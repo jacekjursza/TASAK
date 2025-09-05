@@ -21,3 +21,4 @@ dist/
 # Local config files
 tasak.yaml
 gok.json
+atlassian.json
