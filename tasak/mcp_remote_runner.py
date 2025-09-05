@@ -3,6 +3,8 @@
 import subprocess
 import sys
 from typing import Any, Dict, List
+from .mcp_remote_client import MCPRemoteClient
+from .schema_manager import SchemaManager
 
 
 def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
@@ -46,39 +48,100 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
         _run_interactive_mode(server_url)
         return
 
-    # Build the npx command
-    cmd = ["npx", "-y", "mcp-remote", server_url]
+    if "--clear-cache" in app_args:
+        _clear_cache(app_name)
+        return
 
-    # Add any additional arguments from config
-    extra_args = meta.get("args", [])
-    if extra_args:
-        cmd.extend(extra_args)
+    # Use the new MCPRemoteClient for normal tool operations
+    client = MCPRemoteClient(app_name, app_config)
 
-    # Add user-provided arguments
-    if app_args:
-        cmd.extend(app_args)
+    # Determine mode from config
+    mode = meta.get("mode", "dynamic")
 
-    print(f"Connecting to {app_name} via mcp-remote...", file=sys.stderr)
-    print(f"Server: {server_url}", file=sys.stderr)
-    print(
-        "Note: This will open a browser for authentication if needed.", file=sys.stderr
-    )
+    # Get tool definitions
+    tool_defs = None
+    schema_manager = SchemaManager()
+
+    if mode == "curated":
+        # Try cached schema first
+        schema_data = schema_manager.load_schema(app_name)
+        if schema_data:
+            tool_defs = schema_manager.convert_to_tool_list(schema_data)
+            age_days = schema_manager.get_schema_age_days(app_name)
+            if age_days and age_days > 7:
+                print(
+                    f"Note: Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
+                    file=sys.stderr,
+                )
+
+    # If no cached schema or dynamic mode, fetch from server
+    if not tool_defs:
+        print(
+            f"Fetching tool definitions for '{app_name}' via mcp-remote...",
+            file=sys.stderr,
+        )
+        tool_defs = client.get_tool_definitions()
+
+        # Cache the tools if we fetched them
+        if tool_defs and mode == "dynamic":
+            schema_manager.save_schema(app_name, tool_defs)
+
+    if not tool_defs:
+        print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
+        print("This could mean:", file=sys.stderr)
+        print("  - Authentication is required", file=sys.stderr)
+        print("  - The server is not available", file=sys.stderr)
+        print("  - There's a configuration issue", file=sys.stderr)
+        print(f"\nTry: tasak admin auth {app_name}", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse arguments to find tool and its args
+    if not app_args:
+        # Show available tools
+        print(f"Available tools for {app_name}:")
+        for tool in tool_defs:
+            print(f"  - {tool['name']}: {tool.get('description', 'No description')}")
+        return
+
+    tool_name = app_args[0]
+    tool_args = {}
+
+    # Simple argument parsing
+    i = 1
+    while i < len(app_args):
+        arg = app_args[i]
+        if arg.startswith("--"):
+            key = arg[2:]
+            if i + 1 < len(app_args) and not app_args[i + 1].startswith("--"):
+                tool_args[key] = app_args[i + 1]
+                i += 2
+            else:
+                tool_args[key] = True
+                i += 1
+        else:
+            i += 1
+
+    # Call the tool
+    import json
 
     try:
-        # Run mcp-remote interactively
-        result = subprocess.run(cmd, check=False)
-        sys.exit(result.returncode)
-
-    except FileNotFoundError:
-        print("Error: npx not found. Please install Node.js first.", file=sys.stderr)
-        print("Visit: https://nodejs.org/", file=sys.stderr)
-        sys.exit(1)
-    except KeyboardInterrupt:
-        print("\nConnection interrupted by user.", file=sys.stderr)
-        sys.exit(0)
+        result = client.call_tool(tool_name, tool_args)
+        if isinstance(result, dict) or isinstance(result, list):
+            print(json.dumps(result, indent=2))
+        else:
+            print(result)
     except Exception as e:
-        print(f"Error running mcp-remote: {e}", file=sys.stderr)
+        print(f"Error executing tool: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def _clear_cache(app_name: str):
+    """Clear cached schema for the app."""
+    schema_manager = SchemaManager()
+    if schema_manager.delete_schema(app_name):
+        print(f"Schema cache cleared for '{app_name}'", file=sys.stderr)
+    else:
+        print(f"No cached schema found for '{app_name}'", file=sys.stderr)
 
 
 def _run_auth_flow(server_url: str):

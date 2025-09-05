@@ -171,9 +171,11 @@ def handle_refresh(args: argparse.Namespace, config: Dict[str, Any]):
     enabled_apps = apps_config.get("enabled_apps", [])
 
     if args.all:
-        # Refresh all MCP apps
+        # Refresh all MCP apps (including mcp-remote)
         mcp_apps = [
-            name for name in enabled_apps if config.get(name, {}).get("type") == "mcp"
+            name
+            for name in enabled_apps
+            if config.get(name, {}).get("type") in ["mcp", "mcp-remote"]
         ]
 
         if not mcp_apps:
@@ -189,7 +191,7 @@ def handle_refresh(args: argparse.Namespace, config: Dict[str, Any]):
         if not app_config:
             print(f"Error: Application '{args.app}' not found.", file=sys.stderr)
             sys.exit(1)
-        if app_config.get("type") != "mcp":
+        if app_config.get("type") not in ["mcp", "mcp-remote"]:
             print(f"Warning: '{args.app}' is not an MCP application.", file=sys.stderr)
             return
 
@@ -204,14 +206,26 @@ def refresh_app_schema(app_name: str, app_config: Dict[str, Any], force: bool = 
     """Refresh schema for a specific app."""
     print(f"Refreshing schema for '{app_name}'...")
 
-    # Clear cache if forcing refresh
-    if force:
-        client = MCPRealClient(app_name, app_config)
-        client.clear_cache()
+    app_type = app_config.get("type")
 
-    # Fetch fresh tool definitions
-    client = MCPRealClient(app_name, app_config)
-    tools = client.get_tool_definitions()
+    if app_type == "mcp":
+        # Clear cache if forcing refresh
+        if force:
+            client = MCPRealClient(app_name, app_config)
+            client.clear_cache()
+
+        # Fetch fresh tool definitions
+        client = MCPRealClient(app_name, app_config)
+        tools = client.get_tool_definitions()
+    elif app_type == "mcp-remote":
+        # Use MCPRemoteClient for mcp-remote apps
+        from .mcp_remote_client import MCPRemoteClient
+
+        client = MCPRemoteClient(app_name, app_config)
+        tools = client.get_tool_definitions()
+    else:
+        print(f"Unsupported app type: {app_type}")
+        return
 
     if tools:
         # Use SchemaManager to save
