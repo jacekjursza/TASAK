@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import sys
 from typing import Any, Dict
 
@@ -10,8 +11,23 @@ from .mcp_client import run_mcp_app
 from .mcp_remote_runner import run_mcp_remote_app
 
 
+def _cleanup_pool():
+    """Clean up the MCP Remote process pool on exit."""
+    try:
+        from .mcp_remote_pool import MCPRemotePool
+        import asyncio
+
+        pool = MCPRemotePool()
+        asyncio.run(pool.shutdown())
+    except Exception:
+        pass  # Ignore errors during cleanup
+
+
 def main():
     """Main entry point for the TASAK application."""
+    # Register cleanup on exit
+    atexit.register(_cleanup_pool)
+
     config = load_and_merge_configs()
 
     # Check if first argument is 'admin'
