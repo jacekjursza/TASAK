@@ -2,6 +2,7 @@ import argparse
 import sys
 from typing import Any, Dict
 
+from .admin_commands import setup_admin_subparsers, handle_admin_command
 from .app_runner import run_cmd_app
 from .config import load_and_merge_configs
 from .mcp_client import run_mcp_app
@@ -10,6 +11,27 @@ from .mcp_remote_runner import run_mcp_remote_app
 
 def main():
     """Main entry point for the TASAK application."""
+    config = load_and_merge_configs()
+
+    # Check if first argument is 'admin'
+    if len(sys.argv) > 1 and sys.argv[1] == "admin":
+        # Handle admin commands with a dedicated parser
+        parser = argparse.ArgumentParser(
+            prog="tasak admin", description="Administrative commands for TASAK"
+        )
+        subparsers = parser.add_subparsers(
+            dest="admin_command", help="Admin command to execute"
+        )
+
+        # Set up admin subcommands
+        setup_admin_subparsers(subparsers)
+
+        # Parse admin args (skip 'tasak' and 'admin')
+        args = parser.parse_args(sys.argv[2:])
+        handle_admin_command(args, config)
+        return
+
+    # Regular app handling (backward compatible)
     parser = argparse.ArgumentParser(
         prog="tasak",
         description="TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents.",
@@ -28,7 +50,6 @@ def main():
     )
 
     args, unknown_args = parser.parse_known_args()
-    config = load_and_merge_configs()
 
     # Manual help handling
     if args.help and not args.app_name:
