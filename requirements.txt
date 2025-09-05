@@ -1,2 +1,4 @@
 PyYAML==6.0.1
 pre-commit
+requests>=2.31.0
+mcp>=1.13.1

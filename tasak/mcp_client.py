@@ -6,60 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 import requests
-
-
-# --- Mock MCP SDK ---
-# This is a stand-in for the real mcp-sdk. It allows for development and testing
-# without needing the actual SDK or a running server.
-class MockSseSession:
-    def __init__(self, headers: Dict[str, str]):
-        self.headers = headers
-        print(
-            f"--- Mocking mcp.sse_client.connect() with headers: {self.headers} ---",
-            file=sys.stderr,
-        )
-
-    def list_tools(self) -> List[Dict[str, Any]]:
-        print("--- Mocking mcp.sse_client.list_tools() ---", file=sys.stderr)
-        # Only check authorization if header is present (for backward compatibility)
-        if "Authorization" in self.headers and not self.headers[
-            "Authorization"
-        ].startswith("Bearer"):
-            raise Exception("Authorization header is invalid.")
-        return [
-            {
-                "name": "create_ticket",
-                "description": "Creates a new ticket in the project.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "project": {
-                            "type": "string",
-                            "description": "The project key (e.g., 'PROJ').",
-                        },
-                        "summary": {
-                            "type": "string",
-                            "description": "The one-line summary for the ticket.",
-                        },
-                    },
-                    "required": ["project", "summary"],
-                },
-            },
-        ]
-
-    def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        print(
-            f"--- Mocking mcp.sse_client.call_tool({tool_name}, ...) ---",
-            file=sys.stderr,
-        )
-        return {"status": "success", "content": f"Successfully called {tool_name}"}
-
-
-def sse_connect(url: str, headers: Dict[str, str]):
-    return MockSseSession(headers)
-
-
-# --- End Mock MCP SDK ---
+from .mcp_real_client import MCPRealClient
 
 CACHE_EXPIRATION_SECONDS = 15 * 60  # 15 minutes
 AUTH_FILE_PATH = Path.home() / ".tasak" / "auth.json"
@@ -70,19 +17,19 @@ ATLASSIAN_CLIENT_ID = "5Dzgchq9CCu2EIgv"
 def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     """Main entry point for running an MCP application."""
     if "--clear-cache" in app_args:
-        _clear_cache(app_name)
+        _clear_cache(app_name, app_config)
         return
 
-    mcp_config = _load_mcp_config(app_config.get("config"))
+    # Use real MCP client
+    client = MCPRealClient(app_name, app_config)
 
-    # Check if authentication is required (default to True for backward compatibility)
-    requires_auth = app_config.get("requires_auth", True)
+    # Get tool definitions
+    tool_defs = client.get_tool_definitions()
 
-    if requires_auth:
-        access_token = _get_access_token(app_name)
-        mcp_config["headers"]["Authorization"] = f"Bearer {access_token}"
+    if not tool_defs:
+        print(f"Error: No tools available for '{app_name}'", file=sys.stderr)
+        sys.exit(1)
 
-    tool_defs = _get_tool_definitions(app_name, mcp_config)
     parser = _build_parser(app_name, tool_defs)
     parsed_args = parser.parse_args(app_args)
 
@@ -93,10 +40,8 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     tool_name = parsed_args.tool_name
     tool_args = {k: v for k, v in vars(parsed_args).items() if k != "tool_name"}
 
-    session = sse_connect(
-        url=mcp_config.get("url"), headers=mcp_config.get("headers", {})
-    )
-    result = session.call_tool(tool_name, tool_args)
+    # Call the tool using real MCP client
+    result = client.call_tool(tool_name, tool_args)
 
     if isinstance(result, dict) or isinstance(result, list):
         print(json.dumps(result, indent=2))
@@ -163,13 +108,10 @@ def _refresh_token(app_name: str, refresh_token: str) -> str:
 # ... (The rest of the functions: _build_parser, _load_mcp_config, etc. remain largely the same) ...
 
 
-def _clear_cache(app_name: str):
-    cache_path = _get_cache_path(app_name)
-    if cache_path.exists():
-        cache_path.unlink()
-        print(f"Cache for '{app_name}' cleared.", file=sys.stderr)
-    else:
-        print(f"No cache found for '{app_name}'.", file=sys.stderr)
+def _clear_cache(app_name: str, app_config: Dict[str, Any]):
+    # Use the real client to clear cache
+    client = MCPRealClient(app_name, app_config)
+    client.clear_cache()
 
 
 def _build_parser(
@@ -247,17 +189,12 @@ def _fetch_and_cache_definitions(
         )
         sys.exit(1)
     url = mcp_config.get("url")
-    headers = mcp_config.get("headers", {})
     if not url:
         print("Error: 'url' not specified in MCP config.", file=sys.stderr)
         sys.exit(1)
-    try:
-        session = sse_connect(url=url, headers=headers)
-        tool_defs = session.list_tools()
-        with open(cache_path, "w") as f:
-            json.dump(tool_defs, f, indent=2)
-        print(f"Successfully cached tool definitions to {cache_path}", file=sys.stderr)
-        return tool_defs
-    except Exception as e:
-        print(f"Error connecting to MCP server or fetching tools: {e}", file=sys.stderr)
-        sys.exit(1)
+    # This function is deprecated - now handled by MCPRealClient
+    print(
+        "Warning: Using deprecated function _fetch_and_cache_definitions",
+        file=sys.stderr,
+    )
+    return []
