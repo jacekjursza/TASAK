@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 import requests
 from .mcp_real_client import MCPRealClient
+from .schema_manager import SchemaManager
 
 CACHE_EXPIRATION_SECONDS = 15 * 60  # 15 minutes
 AUTH_FILE_PATH = Path.home() / ".tasak" / "auth.json"
@@ -20,18 +21,51 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         _clear_cache(app_name, app_config)
         return
 
-    # Use real MCP client
-    client = MCPRealClient(app_name, app_config)
+    # Determine mode
+    meta = app_config.get("meta", {})
+    mode = meta.get("mode", "dynamic")  # Default to dynamic for backward compatibility
 
-    # Get tool definitions
-    tool_defs = client.get_tool_definitions()
+    if mode == "proxy":
+        # Proxy mode - pass arguments directly without validation
+        _run_proxy_mode(app_name, app_config, app_args)
+        return
+
+    # Get tool definitions (for curated and dynamic modes)
+    tool_defs = None
+    schema_manager = SchemaManager()
+
+    if mode == "curated":
+        # Try to load from cached schema first
+        schema_data = schema_manager.load_schema(app_name)
+        if schema_data:
+            tool_defs = schema_manager.convert_to_tool_list(schema_data)
+            # Show age of schema if old
+            age_days = schema_manager.get_schema_age_days(app_name)
+            if age_days and age_days > 7:
+                print(
+                    f"Note: Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
+                    file=sys.stderr,
+                )
+
+    # If no cached schema or dynamic mode, fetch from server
+    if not tool_defs:
+        client = MCPRealClient(app_name, app_config)
+        tool_defs = client.get_tool_definitions()
 
     if not tool_defs:
         print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
-        print("This could mean:", file=sys.stderr)
-        print("  - The server is not running", file=sys.stderr)
-        print("  - The server has no tools exposed", file=sys.stderr)
-        print("  - There's a configuration issue", file=sys.stderr)
+        if mode == "curated" and schema_manager.schema_exists(app_name):
+            print("Schema file exists but couldn't be loaded.", file=sys.stderr)
+        else:
+            print("This could mean:", file=sys.stderr)
+            print("  - The server is not running", file=sys.stderr)
+            print("  - The server has no tools exposed", file=sys.stderr)
+            print("  - There's a configuration issue", file=sys.stderr)
+            if mode == "curated":
+                print(
+                    f"  - No cached schema. Run 'tasak admin refresh {app_name}' first.",
+                    file=sys.stderr,
+                )
         sys.exit(1)
 
     parser = _build_parser(app_name, tool_defs)
@@ -51,6 +85,7 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     }
 
     # Call the tool using real MCP client
+    client = MCPRealClient(app_name, app_config)
     try:
         result = client.call_tool(tool_name, tool_args)
 
@@ -62,6 +97,42 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         # This should rarely happen as MCPRealClient handles most errors
         print(f"Error executing tool: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def _run_proxy_mode(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
+    """Run MCP app in proxy mode - no validation, direct pass-through."""
+    if not app_args:
+        print(f"Usage: tasak {app_name} <tool_name> [args...]", file=sys.stderr)
+        sys.exit(1)
+
+    tool_name = app_args[0]
+    tool_args = {}
+
+    # Simple argument parsing - everything after tool name
+    i = 1
+    while i < len(app_args):
+        arg = app_args[i]
+        if arg.startswith("--"):
+            key = arg[2:]
+            if i + 1 < len(app_args) and not app_args[i + 1].startswith("--"):
+                # Has value
+                tool_args[key] = app_args[i + 1]
+                i += 2
+            else:
+                # Boolean flag
+                tool_args[key] = True
+                i += 1
+        else:
+            i += 1
+
+    # Call tool without validation
+    client = MCPRealClient(app_name, app_config)
+    result = client.call_tool(tool_name, tool_args)
+
+    if isinstance(result, dict) or isinstance(result, list):
+        print(json.dumps(result, indent=2))
+    else:
+        print(result)
 
 
 def _get_access_token(app_name: str) -> str:
