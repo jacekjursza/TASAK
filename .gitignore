@@ -17,3 +17,7 @@ dist/
 
 # Other
 .DS_Store
+
+# Local config files
+tasak.yaml
+gok.json
