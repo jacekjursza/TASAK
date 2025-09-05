@@ -93,3 +93,17 @@ Configs are loaded and merged in order:
 - Max 600 lines per file (enforced by pre-commit)
 - All code, documentation, and comments must be in English
 - Follow DRY principles and maintain modular structure
+
+## Special Modes
+
+### ((REFINE)) Mode
+When the user writes "((REFINE))", enter a special refinement mode where:
+- NO coding or implementation happens
+- Focus ONLY on iterative discussion about improvements and features
+- The ONLY allowed file operations are in `/home/okhan/code/tasak/docs/tasks/`:
+  - Create new task documents
+  - Modify existing task documents
+  - Delete outdated task documents
+- Discuss architecture, design patterns, and implementation strategies
+- Document decisions and requirements in task files
+- Exit this mode when user signals with "((!REFINE))" or similar end signal

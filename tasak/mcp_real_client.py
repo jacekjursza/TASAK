@@ -143,48 +143,13 @@ class MCPRealClient:
         """Async function to fetch tools from MCP server."""
         transport = self.mcp_config.get("transport", "sse")
 
-        # Temporary: Use mock for GOK until we figure out its protocol
-        if self.app_name == "gok":
-            print(
-                "Note: GOK is using mock tools until MCP protocol is verified",
-                file=sys.stderr,
-            )
-            return [
-                {
-                    "name": "search",
-                    "description": "Search for notes in the knowledge base",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query"}
-                        },
-                        "required": ["query"],
-                    },
-                },
-                {
-                    "name": "add_note",
-                    "description": "Add a new note to the knowledge base",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string", "description": "Note title"},
-                            "content": {
-                                "type": "string",
-                                "description": "Note content",
-                            },
-                        },
-                        "required": ["title", "content"],
-                    },
-                },
-            ]
-
         try:
             if transport == "sse":
                 # SSE transport (for GOK and remote servers)
                 url = self.mcp_config.get("url", "http://localhost:8080/sse")
 
-                async with sse_client(url, headers=headers) as client:
-                    async with ClientSession(client.read, client.write) as session:
+                async with sse_client(url, headers=headers) as (read, write):
+                    async with ClientSession(read, write) as session:
                         # Initialize the session
                         await session.initialize()
 
@@ -207,11 +172,18 @@ class MCPRealClient:
             elif transport == "stdio":
                 # STDIO transport (for local servers)
                 command = self.mcp_config.get("command", ["python", "server.py"])
+                env = self.mcp_config.get("env", {})
+
+                # Merge with current environment
+                import os
+
+                full_env = os.environ.copy()
+                full_env.update(env)
 
                 server_params = StdioServerParameters(
                     command=command[0],
                     args=command[1:] if len(command) > 1 else [],
-                    env=None,
+                    env=full_env,
                 )
 
                 async with stdio_client(server_params) as (read, write):
@@ -252,8 +224,8 @@ class MCPRealClient:
             if transport == "sse":
                 url = self.mcp_config.get("url", "http://localhost:8080/sse")
 
-                async with sse_client(url, headers=headers) as client:
-                    async with ClientSession(client.read, client.write) as session:
+                async with sse_client(url, headers=headers) as (read, write):
+                    async with ClientSession(read, write) as session:
                         await session.initialize()
 
                         # Call the tool
@@ -274,11 +246,18 @@ class MCPRealClient:
 
             elif transport == "stdio":
                 command = self.mcp_config.get("command", ["python", "server.py"])
+                env = self.mcp_config.get("env", {})
+
+                # Merge with current environment
+                import os
+
+                full_env = os.environ.copy()
+                full_env.update(env)
 
                 server_params = StdioServerParameters(
                     command=command[0],
                     args=command[1:] if len(command) > 1 else [],
-                    env=None,
+                    env=full_env,
                 )
 
                 async with stdio_client(server_params) as (read, write):
