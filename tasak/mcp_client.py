@@ -21,10 +21,11 @@ class MockSseSession:
 
     def list_tools(self) -> List[Dict[str, Any]]:
         print("--- Mocking mcp.sse_client.list_tools() ---", file=sys.stderr)
-        if "Authorization" not in self.headers or not self.headers[
+        # Only check authorization if header is present (for backward compatibility)
+        if "Authorization" in self.headers and not self.headers[
             "Authorization"
         ].startswith("Bearer"):
-            raise Exception("Authorization header is missing or invalid.")
+            raise Exception("Authorization header is invalid.")
         return [
             {
                 "name": "create_ticket",
@@ -73,8 +74,13 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         return
 
     mcp_config = _load_mcp_config(app_config.get("config"))
-    access_token = _get_access_token(app_name)
-    mcp_config["headers"]["Authorization"] = f"Bearer {access_token}"
+
+    # Check if authentication is required (default to True for backward compatibility)
+    requires_auth = app_config.get("requires_auth", True)
+
+    if requires_auth:
+        access_token = _get_access_token(app_name)
+        mcp_config["headers"]["Authorization"] = f"Bearer {access_token}"
 
     tool_defs = _get_tool_definitions(app_name, mcp_config)
     parser = _build_parser(app_name, tool_defs)
