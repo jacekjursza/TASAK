@@ -6,6 +6,7 @@ from typing import Any, Dict
 from .admin_commands import setup_admin_subparsers, handle_admin_command
 from .app_runner import run_cmd_app
 from .config import load_and_merge_configs
+from .python_plugins import integrate_plugins_into_config, run_python_plugin
 from .curated_app import run_curated_app
 from .mcp_client import run_mcp_app
 from .mcp_remote_runner import run_mcp_remote_app
@@ -73,6 +74,9 @@ def main():
         parser.print_help()
         return
 
+    # Augment with discovered python plugins (ladder-based) for regular app flow
+    config = integrate_plugins_into_config(config)
+
     if not args.app_name:
         _list_available_apps(config)
         return
@@ -108,6 +112,8 @@ def main():
         run_mcp_app(app_name, app_config, unknown_args)
     elif app_type == "mcp-remote":
         run_mcp_remote_app(app_name, app_config, unknown_args)
+    elif app_type == "python-plugin":
+        run_python_plugin(app_name, app_config, unknown_args)
     else:
         print(
             f"Error: Unknown app type '{app_type}' for app '{app_name}'.",
