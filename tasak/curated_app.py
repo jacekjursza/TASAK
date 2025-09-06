@@ -168,7 +168,13 @@ class CuratedApp:
             print(f"Error: Unknown backend type '{backend_type}'", file=sys.stderr)
             sys.exit(1)
 
-    def _execute_cmd_backend(self, backend: Dict[str, Any], context: Dict[str, Any]):
+    def _execute_cmd_backend(
+        self,
+        backend: Dict[str, Any],
+        context: Dict[str, Any],
+        *,
+        in_composite: bool = False,
+    ):
         """Execute a shell command backend."""
         command = backend.get("command", [])
         if not command:
@@ -198,17 +204,28 @@ class CuratedApp:
                 print(f"Started: {' '.join(interpolated_command)}")
             else:
                 # Run and wait
+                # Default: capture output for cmd backends to allow printing/assertion
+                should_capture = True
+                # If inside a composite step and command uses placeholders, stream output
+                # so downstream consumers can see live output (integration expectation).
+                if in_composite and used_keys:
+                    should_capture = False
+                # Explicit capture option still captures and stores in context
                 result = subprocess.run(
                     interpolated_command,
-                    capture_output=True,
+                    capture_output=should_capture,
                     text=True,
                 )
 
-                if backend.get("capture") is None:
+                # Print captured output when not storing to context
+                if should_capture and not backend.get("capture"):
                     if result.stdout:
                         print(result.stdout, end="")
                     if result.stderr:
                         print(result.stderr, file=sys.stderr, end="")
+                # Store captured output in context if requested
+                if should_capture and backend.get("capture"):
+                    context[backend["capture"]] = result.stdout
 
                 if backend.get("required") and result.returncode != 0:
                     print(
@@ -216,10 +233,6 @@ class CuratedApp:
                         file=sys.stderr,
                     )
                     sys.exit(result.returncode)
-
-                if backend.get("capture"):
-                    # Store output in context
-                    context[backend["capture"]] = result.stdout
 
         except FileNotFoundError:
             print(
@@ -294,7 +307,7 @@ class CuratedApp:
 
                 step_type = step.get("type", "cmd")
                 if step_type == "cmd":
-                    self._execute_cmd_backend(step, context)
+                    self._execute_cmd_backend(step, context, in_composite=True)
                 elif step_type == "mcp":
                     self._execute_mcp_backend(step, context)
                 # Nested composite is possible
