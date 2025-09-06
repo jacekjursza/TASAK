@@ -1,0 +1,38 @@
+apps_config:
+  enabled_apps:
+    - hello
+    - hello-proxy
+    - test-mcp
+
+# App definitions at the top level
+hello:
+  type: curated
+  name: "Hello App"
+  description: "A simple app to greet people."
+  commands:
+    - name: greet
+      description: "Greets someone."
+      backend:
+        type: cmd
+        command: "python tests/e2e/mini-apps/hello_cmd.py"
+      params:
+        - name: --name
+          type: str
+          default: "World"
+          help: "Name to greet"
+        - name: --repeat
+          type: int
+          default: 1
+          help: "Number of times to repeat"
+        - name: --json
+          type: bool
+          action: store_true
+          help: "Output as JSON"
+
+hello-proxy:
+  type: cmd
+  command: python tests/e2e/mini-apps/hello_cmd.py
+
+test-mcp:
+  type: mcp
+  config: tests/e2e/test-mcp.json
