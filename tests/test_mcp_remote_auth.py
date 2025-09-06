@@ -82,42 +82,26 @@ class TestAuthenticateWithMcpRemote:
         captured = capsys.readouterr()
         assert "Error running mcp-remote: Unexpected error" in captured.err
 
+    @patch("sys.exit")
     @patch("tasak.mcp_remote_auth.authenticate_with_mcp_remote")
-    @patch("tasak.mcp_remote_auth.sys.exit")
-    def test_main_success(self, mock_exit, mock_auth):
+    def test_main_success(self, mock_auth, mock_exit):
         """Test main execution with successful auth."""
         mock_auth.return_value = True
 
-        # Import and run the module as main
-        import tasak.mcp_remote_auth
+        from tasak.mcp_remote_auth import main
 
-        with patch.object(tasak.mcp_remote_auth, "__name__", "__main__"):
-            exec(
-                compile(
-                    open(tasak.mcp_remote_auth.__file__).read(),
-                    tasak.mcp_remote_auth.__file__,
-                    "exec",
-                )
-            )
+        main()
 
         mock_exit.assert_called_with(0)
 
+    @patch("sys.exit")
     @patch("tasak.mcp_remote_auth.authenticate_with_mcp_remote")
-    @patch("tasak.mcp_remote_auth.sys.exit")
-    def test_main_failure(self, mock_exit, mock_auth):
+    def test_main_failure(self, mock_auth, mock_exit):
         """Test main execution with failed auth."""
         mock_auth.return_value = False
 
-        # Import and run the module as main
-        import tasak.mcp_remote_auth
+        from tasak.mcp_remote_auth import main
 
-        with patch.object(tasak.mcp_remote_auth, "__name__", "__main__"):
-            exec(
-                compile(
-                    open(tasak.mcp_remote_auth.__file__).read(),
-                    tasak.mcp_remote_auth.__file__,
-                    "exec",
-                )
-            )
+        main()
 
         mock_exit.assert_called_with(1)
