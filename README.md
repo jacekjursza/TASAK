@@ -272,14 +272,6 @@ def smart_refactor(file_pattern: str, old_name: str, new_name: str):
 - **Discussions**: [Share your TASAK configs and workflows](https://github.com/jacekjursza/TASAK/discussions)
 - **Examples**: Check out `examples/` folder for real-world configurations
 
-## 💬 What Users Say
-
-> "TASAK reduced my Claude Code token usage by 80%. My AI assistant now understands my entire development workflow." - *DevOps Engineer*
-
-> "We standardized our team's toolchain with TASAK. New developers are productive on day one." - *Team Lead*
-
-> "The Python plugins feature is a game-changer. My AI agent literally improves itself!" - *AI Power User*
-
 ## 🛠️ For Contributors
 
 Built with Python 3.11+, following TDD principles. We welcome contributions!
