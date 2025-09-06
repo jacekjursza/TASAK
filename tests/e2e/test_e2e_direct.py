@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import patch
 import yaml
 
-import pytest
 
 # Add tasak to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -153,31 +152,12 @@ class TestDirectCmdApps:
                 assert data["count"] == 1
 
 
-class TestDirectMCPApps:
-    """Test MCP apps directly."""
-
-    def setup_method(self):
-        """Setup test config for MCP apps."""
-        self.test_config = {
-            "apps_config": {
-                "enabled_apps": ["test-mcp"],
-            },
-            "test-mcp": {
-                "type": "mcp",
-                "command": "python",
-                "args": [
-                    str(Path(__file__).parent / "mini-apps" / "simple_mcp_server.py")
-                ],
-                "env": {"PYTHONPATH": "."},
-            },
-        }
-
-    @pytest.mark.skip(reason="MCP requires actual server process - complex to test")
-    def test_mcp_server_basic(self):
-        """Test basic MCP server functionality."""
-        # MCP servers require actual process spawning and IPC
-        # This would need significant mocking or actual server running
-        pass
+"""
+Note: A previous test class (TestDirectMCPApps) attempted to spin up an MCP
+server directly here. That scenario is already covered by
+tests/e2e/test_mcp_apps.py via the tasak CLI, so we removed the duplicate,
+environment-sensitive direct test for stability.
+"""
 
 
 class TestRealApps:
