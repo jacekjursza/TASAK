@@ -20,6 +20,7 @@ def _run_proxy_mode(meta: Dict[str, Any], app_args: List[str]):
             file=sys.stderr,
         )
         sys.exit(1)
+        return  # Ensure function stops here even if sys.exit is mocked
 
     if isinstance(base_command, str):
         command_list = base_command.split()

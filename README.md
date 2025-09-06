@@ -2,16 +2,17 @@
 
 **TASAK is a command-line proxy that allows AI agents to safely and effectively use predefined tools and applications within your local environment.**
 
-It acts as a secure bridge, exposing a curated set of commands (`cmd` apps) and powerful, AI-native servers (`mcp` apps) through a simple configuration file. The primary user of TASAK is an AI agent, which uses it as an interface to perform tasks on your behalf.
+It acts as a secure bridge, exposing simple commands (`cmd` apps), powerful AI-native servers (`mcp` apps), and composite workflows (`curated` apps) through a simple configuration file. The primary user of TASAK is an AI agent, which uses it as an interface to perform tasks on your behalf.
 
 ## Key Features
 
 *   **AI-First:** Designed from the ground up as a tool for AI agents to interact with a local system.
 *   **Declarative Configuration:** Define available applications and their settings in a simple `tasak.yaml` file.
 *   **Hierarchical Config:** Merge global (`~/.tasak/`) and local (`./`) configurations for maximum flexibility.
-*   **Two App Types:**
-    *   `cmd`: Expose simple, one-off shell commands.
+*   **Three App Types:**
+    *   `cmd`: Execute simple, one-off shell commands.
     *   `mcp`: Run persistent, AI-native servers using the **Model Context Protocol (MCP)** for advanced, stateful interactions.
+    *   `curated`: Create composite APIs that orchestrate multiple tools into unified workflows.
 *   **Secure:** You have full control over which commands and applications the AI agent can access.
 
 ## How It Works
@@ -38,7 +39,6 @@ sequenceDiagram
 
 ### Installation
 
-*(This is a placeholder, as the installation method is not yet defined)*
 
 ```bash
 # Recommended: Install via pipx
@@ -94,9 +94,9 @@ TASAK uses a hierarchical configuration system. It loads and merges YAML files i
 
 This allows you to define global tools (like a calculator) and project-specific tools (like a build script) separately.
 
-### Example: `cmd` and `mcp` Apps
+### Example: App Types
 
-Here is a more advanced `tasak.yaml` defining both a simple command and an MCP server for weather forecasts.
+Here is a more advanced `tasak.yaml` showcasing different app types.
 
 ```yaml
 header: "Project-specific apps for MyWebApp"
@@ -116,18 +116,38 @@ run_server:
 
 # App Type: mcp
 # A persistent MCP server providing weather data.
-# The AI can interact with this service more intelligently than a simple command.
 weather_service:
   name: "Weather MCP Service"
   type: "mcp"
   meta:
-    # TASAK will run this command to start the MCP server.
-    # This assumes you have a weather_server.py file as defined in docs/MCP_Server_Build_Use.md
     command: "uv run /path/to/your/weather_server.py"
     env:
-      # Securely provide API keys to your MCP server
       OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+
+# App Type: curated (NEW!)
+# Composite API that orchestrates multiple tools
+dev_workflow:
+  name: "Development Workflow"
+  type: "curated"
+  commands:
+    - name: "start"
+      description: "Start all development services"
+      backend:
+        type: composite
+        steps:
+          - type: cmd
+            command: ["docker-compose", "up", "-d"]
+          - type: cmd
+            command: ["npm", "run", "dev"]
 ```
+
+## Documentation
+
+For detailed documentation, see:
+- [About TASAK](docs/final/00_about.md) - Overview and benefits
+- [Installation & Setup](docs/final/01_setup.md) - Complete setup guide
+- [Basic Usage](docs/final/02_basic_usage.md) - Creating simple `cmd` apps
+- [Advanced Usage](docs/final/03_advanced_usage.md) - MCP servers, `curated` apps, and complex workflows
 
 ## For Developers
 

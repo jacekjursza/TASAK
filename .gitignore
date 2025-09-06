@@ -22,3 +22,4 @@ dist/
 tasak.yaml
 gok.json
 atlassian.json
+.coverage

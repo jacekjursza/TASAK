@@ -81,13 +81,21 @@ class MCPRemoteClient:
             # Call the tool
             result = await session.call_tool(tool_name, arguments)
 
-            # Extract the result
-            if result.content and len(result.content) > 0:
+            # Extract the result with proper validation
+            if (
+                hasattr(result, "content")
+                and result.content
+                and len(result.content) > 0
+            ):
                 content = result.content[0]
                 if hasattr(content, "text"):
                     return content.text
                 elif hasattr(content, "data"):
                     return content.data
+
+            # If result doesn't have expected structure, return it as-is or a default
+            if result:
+                return result
 
             return {
                 "status": "success",
@@ -95,11 +103,18 @@ class MCPRemoteClient:
             }
 
         except Exception as e:
-            print(f"Error calling tool through mcp-remote: {e}", file=sys.stderr)
-            if "401" in str(e) or "unauthorized" in str(e).lower():
+            error_msg = str(e)
+            print(
+                f"Error calling tool through mcp-remote: {error_msg}", file=sys.stderr
+            )
+
+            # Check if it's an authentication error
+            if "401" in error_msg or "unauthorized" in error_msg.lower():
                 print(
                     f"Authentication required. Run: tasak admin auth {self.app_name}",
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            sys.exit(1)
+
+            # For other errors, raise them instead of exiting
+            raise RuntimeError(f"Failed to call tool {tool_name}: {error_msg}") from e

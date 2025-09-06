@@ -105,6 +105,7 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
 
     tool_name = app_args[0]
     tool_args = {}
+    unexpected_args = []
 
     # Simple argument parsing
     i = 1
@@ -119,7 +120,17 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
                 tool_args[key] = True
                 i += 1
         else:
+            # Collect unexpected positional arguments
+            unexpected_args.append(arg)
             i += 1
+
+    # Warn about unexpected positional arguments
+    if unexpected_args:
+        print(
+            f"Warning: Ignoring unexpected positional arguments: {unexpected_args}",
+            file=sys.stderr,
+        )
+        print("Hint: Use --key value format for tool parameters", file=sys.stderr)
 
     # Call the tool
     import json
