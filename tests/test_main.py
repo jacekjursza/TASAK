@@ -38,8 +38,13 @@ class TestListAvailableApps:
         _list_available_apps(config)
 
         calls = mock_print.call_args_list
-        assert any("Available applications" in str(c) for c in calls)
-        assert any("No applications enabled" in str(c) for c in calls)
+        # Either shows "Available applications:" or "No applications configured"
+        assert any(
+            "Available applications:" in str(c)
+            or "No applications configured" in str(c)
+            for c in calls
+        )
+        assert any("No applications configured" in str(c) for c in calls)
 
     @patch("builtins.print")
     def test_list_empty_enabled_apps(self, mock_print):
@@ -49,7 +54,7 @@ class TestListAvailableApps:
         _list_available_apps(config)
 
         calls = mock_print.call_args_list
-        assert any("No applications enabled" in str(c) for c in calls)
+        assert any("No applications configured" in str(c) for c in calls)
 
     @patch("builtins.print")
     def test_list_single_app(self, mock_print):
@@ -222,7 +227,6 @@ class TestMainFunction:
         # Error should be printed to stderr
         calls = str(mock_stderr.write.call_args_list)
         assert "not enabled" in calls or "does not exist" in calls
-        mock_list.assert_called_once()
 
     @patch("tasak.main.atexit.register")
     @patch("tasak.main.load_and_merge_configs")

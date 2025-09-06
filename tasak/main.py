@@ -211,7 +211,7 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
             "curated": "🎯",
             "python-plugin": "🐍",
         }.get(app_type, "📋")
-        print(f"  {type_icon} {app_name:<20} - {app_description}")
+        print(f"  {type_icon} {app_name:<20} ({app_type}) - {app_description}")
 
     print("\n💡 Usage: tasak <app_name> [arguments]")
     print("   Help:  tasak <app_name> --help")
