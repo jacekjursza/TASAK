@@ -35,6 +35,13 @@ sequenceDiagram
     TASAK-->>AI Agent: Stream file list
 ```
 
+## Documentation
+
+- About: `docs/about.md`
+- Setup: `docs/setup.md`
+- Basic Usage: `docs/basic_usage.md`
+- Advanced Usage: `docs/advanced_usage.md`
+
 ## Getting Started
 
 ### Installation
