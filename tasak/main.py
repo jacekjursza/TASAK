@@ -97,6 +97,7 @@ def main():
     if not app_config:
         print(f"Error: Configuration for app '{app_name}' not found.", file=sys.stderr)
         sys.exit(1)
+        return  # Ensure function stops here even if sys.exit is mocked
 
     app_type = app_config.get("type")
     if app_type == "cmd":
