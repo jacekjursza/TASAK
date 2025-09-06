@@ -23,3 +23,8 @@ tasak.yaml
 gok.json
 atlassian.json
 .coverage
+
+# AI Assistant files (project-specific guidance)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
