@@ -3,10 +3,16 @@ from pathlib import Path
 import yaml
 
 
+def get_config_filename() -> str:
+    """Returns the config filename to use (can be customized via environment)."""
+    return os.environ.get("TASAK_CONFIG_NAME", "tasak.yaml")
+
+
 def get_global_config_path() -> Path | None:
     """Returns the path to the global config file, if it exists."""
     home_dir = Path.home()
-    config_path = home_dir / ".tasak" / "tasak.yaml"
+    config_name = get_config_filename()
+    config_path = home_dir / ".tasak" / config_name
     return config_path if config_path.exists() else None
 
 
@@ -14,16 +20,18 @@ def find_local_config_paths() -> list[Path]:
     """Finds all local config files by traversing up the directory tree."""
     search_paths = []
     current_dir = Path.cwd()
+    config_name = get_config_filename()
 
     while True:
-        tasak_yaml = current_dir / "tasak.yaml"
-        dot_tasak_yaml = current_dir / ".tasak" / "tasak.yaml"
+        # Support both direct file and in .tasak directory
+        direct_config = current_dir / config_name
+        dot_tasak_config = current_dir / ".tasak" / config_name
 
-        if dot_tasak_yaml.exists():
-            search_paths.append(dot_tasak_yaml)
+        if dot_tasak_config.exists():
+            search_paths.append(dot_tasak_config)
 
-        if tasak_yaml.exists():
-            search_paths.append(tasak_yaml)
+        if direct_config.exists():
+            search_paths.append(direct_config)
 
         if current_dir.parent == current_dir:  # Reached the root
             break
