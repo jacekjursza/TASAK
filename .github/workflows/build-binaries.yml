@@ -1,0 +1,170 @@
+name: Build Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build binaries for'
+        required: false
+        default: 'latest'
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: tasak-linux-x64
+            pyinstaller_args: --onefile
+          - os: windows-latest
+            artifact_name: tasak-windows-x64.exe
+            pyinstaller_args: --onefile --console
+          - os: macos-latest
+            artifact_name: tasak-macos-x64
+            pyinstaller_args: --onefile
+          - os: macos-13
+            artifact_name: tasak-macos-intel
+            pyinstaller_args: --onefile
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller ${{ matrix.pyinstaller_args }} \
+            --name tasak \
+            --add-data "README.md:." \
+            --hidden-import tasak \
+            --hidden-import yaml \
+            --hidden-import mcp \
+            --collect-all tasak \
+            --distpath dist \
+            --workpath build \
+            --specpath build \
+            tasak/main.py
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mv dist/tasak dist/${{ matrix.artifact_name }}
+          chmod +x dist/${{ matrix.artifact_name }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Move-Item -Path "dist\tasak.exe" -Destination "dist\${{ matrix.artifact_name }}"
+
+      - name: Test binary
+        if: runner.os != 'Windows'
+        run: |
+          dist/${{ matrix.artifact_name }} --version
+
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          dist\${{ matrix.artifact_name }} --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
+
+  create-universal-macos:
+    name: Create Universal macOS Binary
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tasak-macos-intel
+          path: ./intel
+
+      - name: Download ARM binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tasak-macos-x64
+          path: ./arm
+
+      - name: Create universal binary
+        run: |
+          lipo -create -output tasak-macos-universal \
+            ./intel/tasak-macos-intel \
+            ./arm/tasak-macos-x64
+          chmod +x tasak-macos-universal
+
+      - name: Test universal binary
+        run: |
+          ./tasak-macos-universal --version
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasak-macos-universal
+          path: tasak-macos-universal
+
+  release:
+    name: Attach Binaries to Release
+    needs: [build, create-universal-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./binaries
+
+      - name: Display structure
+        run: ls -la ./binaries/*/
+
+      - name: Create checksums
+        run: |
+          cd binaries
+          for dir in */; do
+            cd "$dir"
+            for file in *; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" > "$file.sha256"
+                mv "$file" "../$file"
+                mv "$file.sha256" "../$file.sha256"
+              fi
+            done
+            cd ..
+          done
+          cd ..
+          ls -la binaries/
+
+      - name: Upload to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for file in binaries/tasak-*; do
+            if [[ -f "$file" && ! "$file" == *.sha256 ]]; then
+              echo "Uploading $file..."
+              gh release upload "${{ github.event.release.tag_name }}" \
+                "$file" \
+                "$file.sha256" \
+                --clobber \
+                --repo ${{ github.repository }}
+            fi
+          done
