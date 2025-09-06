@@ -144,10 +144,10 @@ dev_workflow:
 ## Documentation
 
 For detailed documentation, see:
-- [About TASAK](docs/final/00_about.md) - Overview and benefits
-- [Installation & Setup](docs/final/01_setup.md) - Complete setup guide
-- [Basic Usage](docs/final/02_basic_usage.md) - Creating simple `cmd` apps
-- [Advanced Usage](docs/final/03_advanced_usage.md) - MCP servers, `curated` apps, and complex workflows
+- [About TASAK](docs/about.md) - Overview and benefits
+- [Installation & Setup](docs/setup.md) - Complete setup guide
+- [Basic Usage](docs/basic_usage.md) - Creating simple `cmd` apps
+- [Advanced Usage](docs/advanced_usage.md) - MCP servers, `curated` apps, and complex workflows
 
 ## For Developers
 

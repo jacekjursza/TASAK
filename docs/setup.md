@@ -245,5 +245,5 @@ After setup, your TASAK configuration structure should look like:
 
 Now that TASAK is installed and configured, you're ready to:
 
-→ Learn [Basic Usage](02_basic_usage.md) - Create your first apps
-→ Explore [Advanced Usage](03_advanced_usage.md) - MCP servers and complex workflows
+→ Learn [Basic Usage](basic_usage.md) - Create your first apps
+→ Explore [Advanced Usage](advanced_usage.md) - MCP servers and complex workflows

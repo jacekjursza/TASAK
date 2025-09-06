@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `tasak/`: Core package (CLI entry `main.py`, config loader `config.py`, runners: `app_runner.py`, `mcp_*`, `curated_app.py`, admin `admin_commands.py`).
 - `tests/`: Unit and e2e tests (`tests/e2e/mini-apps/` contains small sample servers).
-- `docs/`: Final user docs under `docs/final/`.
+- `docs/`: Final user docs under `docs/`.
 - `examples/`: Example configuration files.
 - Top-level: `pyproject.toml` (package + `tasak` console script), `.pre-commit-config.yaml`, `requirements.txt`.
 
@@ -29,7 +29,7 @@
 
 ## Commit & Pull Request Guidelines
 - Commit style: Conventional Commits (e.g., `feat: add curated mode`, `fix(mcp): handle OAuth errors`).
-- PRs: concise description, linked issues, test coverage for changes, update docs under `docs/final/` when applicable, include CLI output or screenshots for UX changes.
+- PRs: concise description, linked issues, test coverage for changes, update docs under `docs/` when applicable, include CLI output or screenshots for UX changes.
 - Keep PRs small and focused; ensure `pre-commit` and `pytest` pass.
 
 ## Security & Configuration Tips

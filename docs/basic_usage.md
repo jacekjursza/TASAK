@@ -7,7 +7,7 @@ This guide covers creating and using simple `cmd` apps - the foundation of TASAK
 TASAK supports two app types:
 
 - **`cmd`**: Execute shell commands (this guide)
-- **`mcp`**: Run persistent MCP servers ([Advanced Usage](03_advanced_usage.md))
+- **`mcp`**: Run persistent MCP servers ([Advanced Usage](advanced_usage.md))
 
 ## Your First App
 
@@ -63,7 +63,7 @@ tasak git_status --short
 
 ## Introduction to Curated Apps
 
-**Note**: Curated apps are a new feature that create composite APIs from multiple tools. They're covered in detail in [Advanced Usage](03_advanced_usage.md).
+**Note**: Curated apps are a new feature that create composite APIs from multiple tools. They're covered in detail in [Advanced Usage](advanced_usage.md).
 
 Unlike simple `cmd` apps, `curated` apps can:
 - Orchestrate multiple commands
@@ -409,6 +409,6 @@ my_app:
 
 You've learned the basics of creating and using `cmd` apps. Ready for more?
 
-� Explore [Advanced Usage](03_advanced_usage.md) - Learn about MCP servers, authentication, and complex workflows
-� Check out example configurations in the repository
-� Share your custom apps with the community!
+- Explore [Advanced Usage](advanced_usage.md) - Learn about MCP servers, authentication, and complex workflows
+- Check out example configurations in the repository
+- Share your custom apps with the community!
