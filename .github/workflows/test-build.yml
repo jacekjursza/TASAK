@@ -1,14 +1,9 @@
-name: Build Binaries
+name: Test Build Binaries
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [ fix/binary-builds ]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to build binaries for'
-        required: false
-        default: 'latest'
 
 jobs:
   build:
@@ -76,7 +71,7 @@ jobs:
         run: |
           Move-Item -Path "dist\tasak.exe" -Destination "dist\${{ matrix.artifact_name }}"
 
-      - name: Test binary
+      - name: Test binary (Unix)
         if: runner.os != 'Windows'
         run: |
           dist/${{ matrix.artifact_name }} --version
@@ -111,14 +106,8 @@ jobs:
 
       - name: Create universal binary
         run: |
-          lipo -create -output tasak-macos-universal \
-            ./intel/tasak-macos-intel \
-            ./arm/tasak-macos-x64
+          lipo -create -output tasak-macos-universal ./intel/tasak-macos-intel ./arm/tasak-macos-x64
           chmod +x tasak-macos-universal
-
-      - name: Test universal binary
-        run: |
-          ./tasak-macos-universal --version
 
       - name: Upload universal binary
         uses: actions/upload-artifact@v4
@@ -126,13 +115,10 @@ jobs:
           name: tasak-macos-universal
           path: tasak-macos-universal
 
-  release:
-    name: Attach Binaries to Release
+  test-attach:
+    name: Test Attach Binaries
     needs: [build, create-universal-macos]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    permissions:
-      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -140,7 +126,14 @@ jobs:
           path: ./binaries
 
       - name: Display structure
-        run: ls -la ./binaries/*/
+        run: |
+          echo "=== Top level structure ==="
+          ls -la ./binaries/
+          echo "=== Content of each artifact folder ==="
+          for dir in ./binaries/*/; do
+            echo "Content of $dir:"
+            ls -la "$dir"
+          done
 
       - name: Prepare binaries
         run: |
@@ -166,19 +159,3 @@ jobs:
           done
           echo "=== Files with checksums ==="
           ls -la
-
-      - name: Upload to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cd final-binaries
-          for file in tasak-*; do
-            if [[ -f "$file" && ! "$file" == *.sha256 ]]; then
-              echo "Uploading $file..."
-              gh release upload "${{ github.event.release.tag_name }}" \
-                "$file" \
-                "$file.sha256" \
-                --clobber \
-                --repo ${{ github.repository }}
-            fi
-          done
