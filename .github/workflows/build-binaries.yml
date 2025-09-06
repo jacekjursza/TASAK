@@ -50,7 +50,6 @@ jobs:
         run: |
           pyinstaller ${{ matrix.pyinstaller_args }} \
             --name tasak \
-            --add-data "README.md:." \
             --hidden-import tasak \
             --hidden-import yaml \
             --hidden-import mcp \
