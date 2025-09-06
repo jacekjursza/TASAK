@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "tasak"
 version = "0.1.1"
 authors = [
-  { name="Jacek Jursza", email="jacek@jursza.net" },
+  { name="Jacek Jursza", email="okhan.pl@gmail.com" },
 ]
 description = "Transform your AI coding assistant into a productivity powerhouse with custom tools and workflows"
 readme = "README.md"
