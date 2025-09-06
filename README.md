@@ -2,6 +2,12 @@
 
 **Transform your AI coding assistant into a productivity powerhouse with custom tools and workflows tailored to YOUR codebase.**
 
+[![PyPI version](https://badge.fury.io/py/tasak.svg)](https://badge.fury.io/py/tasak)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub release](https://img.shields.io/github/release/jacekjursza/tasak.svg)](https://github.com/jacekjursza/tasak/releases/latest)
+
+📋 **[See what's new in v0.1.0 →](CHANGELOG.md)**
+
 ## 🚀 Why TASAK?
 
 ### For AI Agent Power Users (Claude Code, Cursor, Copilot)
@@ -265,6 +271,7 @@ def smart_refactor(file_pattern: str, old_name: str, new_name: str):
 - [Installation & Setup](docs/setup.md) - Get running in 2 minutes
 - [Basic Usage](docs/basic_usage.md) - Your first `cmd` apps
 - [Advanced Usage](docs/advanced_usage.md) - MCP servers, Python plugins, and workflows
+- [Changelog](CHANGELOG.md) - See all releases and changes
 
 ## 🤝 Community & Support
 
