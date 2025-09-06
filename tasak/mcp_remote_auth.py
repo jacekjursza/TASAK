@@ -50,6 +50,11 @@ def authenticate_with_mcp_remote():
         return False
 
 
-if __name__ == "__main__":
+def main():
+    """Main function for command line execution."""
     success = authenticate_with_mcp_remote()
     sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()

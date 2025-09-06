@@ -118,8 +118,8 @@ class TestSaveRegistration:
 
     @patch("builtins.open", new_callable=mock_open)
     @patch("os.chmod")
-    @patch("tasak.dynamic_registration.Path.exists")
-    @patch("tasak.dynamic_registration.Path.mkdir")
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.mkdir")
     def test_save_new_registration(
         self, mock_mkdir, mock_exists, mock_chmod, mock_file
     ):
@@ -145,7 +145,7 @@ class TestSaveRegistration:
 
     @patch("builtins.open", new_callable=mock_open, read_data='{"ExistingApp": {}}')
     @patch("os.chmod")
-    @patch("tasak.dynamic_registration.Path.exists")
+    @patch("pathlib.Path.exists")
     def test_save_registration_existing_file(self, mock_exists, mock_chmod, mock_file):
         """Test saving registration when file exists with other registrations."""
         mock_exists.return_value = True
@@ -170,7 +170,7 @@ class TestGetSavedRegistration:
         new_callable=mock_open,
         read_data='{"TestApp": {"client_id": "saved123"}}',
     )
-    @patch("tasak.dynamic_registration.Path.exists")
+    @patch("pathlib.Path.exists")
     def test_get_existing_registration(self, mock_exists, mock_file):
         """Test retrieving existing registration."""
         mock_exists.return_value = True
@@ -180,7 +180,7 @@ class TestGetSavedRegistration:
         assert registration is not None
         assert registration["client_id"] == "saved123"
 
-    @patch("tasak.dynamic_registration.Path.exists")
+    @patch("pathlib.Path.exists")
     def test_get_registration_file_not_exists(self, mock_exists):
         """Test retrieving registration when file doesn't exist."""
         mock_exists.return_value = False
@@ -190,7 +190,7 @@ class TestGetSavedRegistration:
         assert registration is None
 
     @patch("builtins.open", new_callable=mock_open, read_data='{"OtherApp": {}}')
-    @patch("tasak.dynamic_registration.Path.exists")
+    @patch("pathlib.Path.exists")
     def test_get_registration_app_not_found(self, mock_exists, mock_file):
         """Test retrieving registration for app not in file."""
         mock_exists.return_value = True
@@ -200,7 +200,7 @@ class TestGetSavedRegistration:
         assert registration is None
 
     @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
-    @patch("tasak.dynamic_registration.Path.exists")
+    @patch("pathlib.Path.exists")
     def test_get_registration_invalid_json(self, mock_exists, mock_file):
         """Test handling of invalid JSON in registration file."""
         mock_exists.return_value = True
