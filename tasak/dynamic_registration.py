@@ -106,10 +106,14 @@ def _save_registration(app_name: str, registration_data: Dict):
     with open(registration_file, "w") as f:
         json.dump(registrations, f, indent=2)
 
-    # Set proper permissions
+    # Set proper permissions (Unix-like systems only)
     import os
 
-    os.chmod(registration_file, 0o600)
+    try:
+        os.chmod(registration_file, 0o600)
+    except (OSError, AttributeError):
+        # Windows doesn't support chmod the same way
+        pass
 
 
 def get_saved_registration(app_name: str) -> Optional[Dict]:

@@ -362,9 +362,13 @@ def _save_token(app_name: str, token_data: dict):
 
     with open(AUTH_FILE_PATH, "w") as f:
         json.dump(all_tokens, f, indent=2)
-    os.chmod(
-        AUTH_FILE_PATH, 0o600
-    )  # Set file permissions to be readable/writable only by the user
+
+    # Set file permissions (Unix-like systems only)
+    try:
+        os.chmod(AUTH_FILE_PATH, 0o600)
+    except (OSError, AttributeError):
+        # Windows doesn't support chmod the same way
+        pass
 
 
 if __name__ == "__main__":
