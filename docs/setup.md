@@ -1,4 +1,27 @@
 # Installation & Setup
+## Contents
+
+- [Prerequisites](#prerequisites)
+- [Installation Methods](#installation-methods)
+  - [Option 1: Install via pipx (Recommended)](#option-1-install-via-pipx-recommended)
+  - [Option 2: Install via pip](#option-2-install-via-pip)
+  - [Option 3: Development Installation](#option-3-development-installation)
+- [Verify Installation](#verify-installation)
+- [Configuration System](#configuration-system)
+  - [Configuration Hierarchy](#configuration-hierarchy)
+  - [How Config Merging Works](#how-config-merging-works)
+  - [Initial Setup](#initial-setup)
+  - [Project-Specific Configuration](#project-specific-configuration)
+  - [Configuration Priority Rules](#configuration-priority-rules)
+  - [Best Practices](#best-practices)
+- [Environment Variables](#environment-variables)
+- [Directory Structure](#directory-structure)
+- [Troubleshooting](#troubleshooting)
+  - [Command not found](#command-not-found)
+  - [Configuration not loading](#configuration-not-loading)
+  - [Apps not appearing](#apps-not-appearing)
+- [Next Steps](#next-steps)
+
 
 ## Prerequisites
 
