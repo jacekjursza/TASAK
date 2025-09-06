@@ -1,4 +1,34 @@
 # Basic Usage
+## Contents
+
+- [Understanding App Types](#understanding-app-types)
+- [Your First App](#your-first-app)
+- [Simple Commands with CMD Apps](#simple-commands-with-cmd-apps)
+- [Introduction to Curated Apps](#introduction-to-curated-apps)
+- [Practical Examples](#practical-examples)
+  - [1. File Operations](#1-file-operations)
+  - [2. Development Tools](#2-development-tools)
+  - [3. System Information](#3-system-information)
+  - [4. Data Processing](#4-data-processing)
+- [Using Environment Variables](#using-environment-variables)
+- [Command Chaining](#command-chaining)
+- [Working with Project Configs](#working-with-project-configs)
+- [Tips and Best Practices](#tips-and-best-practices)
+  - [1. Naming Conventions](#1-naming-conventions)
+  - [2. Security](#2-security)
+  - [3. Documentation](#3-documentation)
+  - [4. Organization](#4-organization)
+  - [5. Error Handling](#5-error-handling)
+- [Common Patterns](#common-patterns)
+  - [Pattern 1: Conditional Execution](#pattern-1-conditional-execution)
+  - [Pattern 2: Multi-line Commands](#pattern-2-multi-line-commands)
+  - [Pattern 3: Output Redirection](#pattern-3-output-redirection)
+- [Troubleshooting Common Issues](#troubleshooting-common-issues)
+  - [App not found](#app-not-found)
+  - [Command fails silently](#command-fails-silently)
+  - [Arguments not working](#arguments-not-working)
+- [Next Steps](#next-steps)
+
 
 This guide covers creating and using simple `cmd` apps - the foundation of TASAK.
 

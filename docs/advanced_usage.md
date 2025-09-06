@@ -1,4 +1,38 @@
 # Advanced Usage
+## Contents
+
+- [MCP-Remote Applications](#mcp-remote-applications)
+  - [What is MCP-Remote?](#what-is-mcp-remote)
+  - [Why Use MCP-Remote?](#why-use-mcp-remote)
+  - [Process Pool Architecture (TASAK Enhancement)](#process-pool-architecture-tasak-enhancement)
+  - [Configuration](#configuration)
+  - [Usage](#usage)
+  - [Error Handling](#error-handling)
+  - [Response Structure Validation](#response-structure-validation)
+  - [Troubleshooting](#troubleshooting)
+- [MCP Local Applications](#mcp-local-applications)
+  - [Configuration](#configuration-2)
+  - [Server Types](#server-types)
+  - [Authentication](#authentication)
+- [CMD Applications](#cmd-applications)
+  - [Curated Mode](#curated-mode)
+  - [Proxy Mode](#proxy-mode)
+- [Admin Commands](#admin-commands)
+  - [Authentication Management](#authentication-management)
+  - [Schema Management](#schema-management)
+  - [Information Commands](#information-commands)
+- [Performance Optimizations](#performance-optimizations)
+  - [Process Pool (MCP-Remote)](#process-pool-mcp-remote)
+  - [Schema Caching](#schema-caching)
+  - [Connection Reuse](#connection-reuse)
+- [Security Considerations](#security-considerations)
+- [Compatibility Notes](#compatibility-notes)
+  - [FastMCP vs Standard SDK](#fastmcp-vs-standard-sdk)
+  - [Version Requirements](#version-requirements)
+- [Examples](#examples)
+  - [Complete Configuration](#complete-configuration)
+  - [Workflow Example](#workflow-example)
+
 
 ## MCP-Remote Applications
 

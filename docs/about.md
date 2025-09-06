@@ -1,4 +1,17 @@
 # TASAK: The Agent's Swiss Army Knife
+## Contents
+
+- [What is TASAK?](#what-is-tasak)
+- [Why TASAK?](#why-tasak)
+  - [🤖 **AI-First Design**](#-ai-first-design)
+  - [🔒 **Security Through Control**](#-security-through-control)
+  - [⚡ **Two Powerful App Types**](#-two-powerful-app-types)
+  - [🎯 **Hierarchical Configuration**](#-hierarchical-configuration)
+- [Core Concept](#core-concept)
+- [Real-World Use Cases](#real-world-use-cases)
+- [Key Benefits](#key-benefits)
+- [Getting Started](#getting-started)
+
 
 ## What is TASAK?
 
