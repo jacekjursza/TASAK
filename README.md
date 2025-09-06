@@ -166,3 +166,7 @@ This project is built with Python and follows Test-Driven Development (TDD).
 - The test server code lives in `tests/e2e/mini-apps/simple_mcp_server.py` and is wired through `tests/e2e/test-mcp.json` and `tests/e2e/tasak_test_config.yaml`.
 - A previously duplicated “direct MCP process” test was removed for stability; coverage remains in `tests/e2e/test_mcp_apps.py`.
 - Run all tests: `pytest -q` (or target E2E: `pytest -q tests/e2e/test_mcp_apps.py`).
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
