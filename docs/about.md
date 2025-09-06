@@ -55,4 +55,4 @@ graph LR
 
 TASAK transforms how AI agents interact with your local environment - from a risky, manual process to a secure, automated workflow. Ready to empower your AI assistant with real tools?
 
-→ Continue to [Installation & Setup](01_setup.md)
+→ Continue to [Installation & Setup](setup.md)
