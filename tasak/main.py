@@ -10,6 +10,7 @@ from .python_plugins import integrate_plugins_into_config, run_python_plugin
 from .curated_app import run_curated_app
 from .mcp_client import run_mcp_app
 from .mcp_remote_runner import run_mcp_remote_app
+from .init_command import handle_init_command
 
 
 def _cleanup_pool():
@@ -28,6 +29,38 @@ def main():
     """Main entry point for the TASAK application."""
     # Register cleanup on exit
     atexit.register(_cleanup_pool)
+
+    # Handle special commands that don't need config
+    if len(sys.argv) > 1:
+        # Handle --init command
+        if sys.argv[1] == "--init" or sys.argv[1] == "-i":
+            parser = argparse.ArgumentParser(prog="tasak")
+            parser.add_argument(
+                "--init",
+                "-i",
+                nargs="?",
+                const="list",
+                help="Initialize TASAK configuration from template",
+            )
+            parser.add_argument(
+                "--global",
+                "-g",
+                action="store_true",
+                help="Create global configuration instead of local",
+            )
+            args = parser.parse_args()
+            handle_init_command(args)
+            return
+
+        # Handle --version
+        if sys.argv[1] == "--version" or sys.argv[1] == "-v":
+            from importlib.metadata import version
+
+            try:
+                print(f"TASAK version {version('tasak')}")
+            except Exception:
+                print("TASAK version: development")
+            return
 
     config = load_and_merge_configs()
 
@@ -66,19 +99,25 @@ def main():
     parser.add_argument(
         "-h", "--help", action="store_true", help="Show this help message and exit."
     )
+    # Add --list-apps for scripting/completions
+    parser.add_argument(
+        "--list-apps", "-l", action="store_true", help="List available applications"
+    )
 
     args, unknown_args = parser.parse_known_args()
 
     # Manual help handling
     if args.help and not args.app_name:
         parser.print_help()
+        print("\n💡 Quick start: Run 'tasak --init' to create a configuration")
         return
 
     # Augment with discovered python plugins (ladder-based) for regular app flow
     config = integrate_plugins_into_config(config)
 
-    if not args.app_name:
-        _list_available_apps(config)
+    # Handle --list-apps
+    if args.list_apps or (not args.app_name):
+        _list_available_apps(config, simple=args.list_apps)
         return
 
     # If help is requested for a specific app, pass it on
@@ -91,10 +130,19 @@ def main():
 
     if app_name not in enabled_apps:
         print(
-            f"Error: App '{app_name}' is not enabled or does not exist.",
+            f"❌ Error: App '{app_name}' is not enabled or does not exist.",
             file=sys.stderr,
         )
-        _list_available_apps(config)
+        print("\n💡 Hint: Did you mean one of these?", file=sys.stderr)
+        # Find similar app names
+        from difflib import get_close_matches
+
+        similar = get_close_matches(app_name, enabled_apps, n=3, cutoff=0.6)
+        if similar:
+            for name in similar:
+                print(f"  - {name}", file=sys.stderr)
+        else:
+            print("  Run 'tasak' to see all available apps", file=sys.stderr)
         sys.exit(1)
 
     app_config = config.get(app_name)
@@ -122,21 +170,51 @@ def main():
         sys.exit(1)
 
 
-def _list_available_apps(config: Dict[str, Any]):
+def _list_available_apps(config: Dict[str, Any], simple: bool = False):
     """Lists all enabled applications from the configuration."""
-    print("Available applications:")
     apps_config = config.get("apps_config", {})
     enabled_apps = apps_config.get("enabled_apps", [])
 
-    if not enabled_apps:
-        print("  (No applications enabled in configuration)")
+    if simple:
+        # Simple mode for shell completions
+        for app_name in sorted(enabled_apps):
+            print(f"  {app_name}")
         return
 
+    # Full display mode
+    print("🚀 TASAK - The Agent's Swiss Army Knife")
+    print("=" * 50)
+
+    if not enabled_apps:
+        print("\n📭 No applications configured yet!")
+        print("\n💡 Get started:")
+        print("  1. Run 'tasak --init' to create a configuration")
+        print("  2. Or create ~/.tasak/tasak.yaml manually")
+        print("\nExample configuration:")
+        print("  apps_config:")
+        print("    enabled_apps: [hello]")
+        print("  hello:")
+        print("    type: cmd")
+        print("    meta:")
+        print("      command: 'echo Hello World'")
+        return
+
+    print("\n📦 Available applications:")
     for app_name in sorted(enabled_apps):
         app_info = config.get(app_name, {})
         app_type = app_info.get("type", "N/A")
         app_description = app_info.get("name", "No description")
-        print(f"  - {app_name:<20} (type: {app_type:<10}) - {app_description}")
+        type_icon = {
+            "cmd": "⚡",
+            "mcp": "🔌",
+            "mcp-remote": "☁️",
+            "curated": "🎯",
+            "python-plugin": "🐍",
+        }.get(app_type, "📋")
+        print(f"  {type_icon} {app_name:<20} - {app_description}")
+
+    print("\n💡 Usage: tasak <app_name> [arguments]")
+    print("   Help:  tasak <app_name> --help")
 
 
 if __name__ == "__main__":
