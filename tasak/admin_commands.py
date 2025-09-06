@@ -11,10 +11,27 @@ from .auth import run_auth_app
 from .python_plugins import discover_python_plugins, get_plugin_search_dirs
 from .mcp_real_client import MCPRealClient
 from .schema_manager import SchemaManager
+from .create_command import handle_create_command
 
 
 def setup_admin_subparsers(subparsers):
     """Set up admin subcommand parsers."""
+
+    # Create_command subcommand - NEW!
+    create_cmd_parser = subparsers.add_parser(
+        "create_command", help="Create a custom command that uses its own config file"
+    )
+    create_cmd_parser.add_argument("name", help="Name for the new command")
+    create_cmd_parser.add_argument(
+        "--global",
+        "-g",
+        dest="install_global",
+        action="store_true",
+        help="Install command globally (in ~/.local/bin)",
+    )
+    create_cmd_parser.add_argument(
+        "--force", "-f", action="store_true", help="Overwrite existing command"
+    )
 
     # Auth subcommand
     auth_parser = subparsers.add_parser(
@@ -108,7 +125,9 @@ def handle_admin_command(args: argparse.Namespace, config: Dict[str, Any]):
         )
         sys.exit(1)
 
-    if args.admin_command == "auth":
+    if args.admin_command == "create_command":
+        handle_create_command(args, config)
+    elif args.admin_command == "auth":
         handle_auth(args, config)
     elif args.admin_command == "refresh":
         handle_refresh(args, config)
@@ -123,6 +142,9 @@ def handle_admin_command(args: argparse.Namespace, config: Dict[str, Any]):
     else:
         print(f"Unknown admin command: {args.admin_command}", file=sys.stderr)
         sys.exit(1)
+
+
+# handle_create_command is now imported from create_command.py
 
 
 def handle_plugins(args: argparse.Namespace, config: Dict[str, Any]):
