@@ -46,7 +46,8 @@ jobs:
           pip install -e .[mcp]
           pip install pyinstaller
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Unix)
+        if: runner.os != 'Windows'
         run: |
           pyinstaller ${{ matrix.pyinstaller_args }} \
             --name tasak \
@@ -58,6 +59,11 @@ jobs:
             --workpath build \
             --specpath build \
             tasak/main.py
+
+      - name: Build with PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller ${{ matrix.pyinstaller_args }} --name tasak --hidden-import tasak --hidden-import yaml --hidden-import mcp --collect-all tasak --distpath dist --workpath build --specpath build tasak/main.py
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
