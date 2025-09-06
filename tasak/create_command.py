@@ -1,6 +1,7 @@
 """Create custom commands that use their own config files."""
 
 import os
+import platform
 import stat
 import shutil
 import sys
@@ -13,6 +14,7 @@ import argparse
 def handle_create_command(args: argparse.Namespace, config: Dict[str, Any]):
     """Create a custom command that uses its own config file."""
     command_name = args.name
+    is_windows = platform.system() == "Windows"
 
     # Validate command name
     if not command_name.replace("-", "").replace("_", "").isalnum():
@@ -45,8 +47,48 @@ def handle_create_command(args: argparse.Namespace, config: Dict[str, Any]):
     else:
         tasak_cmd = f'"{tasak_path}"'
 
-    # Create the wrapper script
-    wrapper_content = f'''#!/usr/bin/env python3
+    if is_windows:
+        # For Windows, create both .py and .bat files
+        py_path = command_path.with_suffix(".py")
+        bat_path = command_path.with_suffix(".bat")
+
+        # Create Python script
+        py_content = f'''"""
+Custom TASAK command: {command_name}
+This command uses {command_name}.yaml instead of tasak.yaml
+"""
+
+import os
+import sys
+import subprocess
+
+# Set environment variable to tell TASAK which config to use
+os.environ["TASAK_CONFIG_NAME"] = "{command_name}.yaml"
+
+# Run TASAK with all passed arguments
+cmd = [{tasak_cmd}] + sys.argv[1:]
+result = subprocess.run(" ".join(cmd), shell=True)
+sys.exit(result.returncode)
+'''
+
+        with open(py_path, "w") as f:
+            f.write(py_content)
+
+        # Create batch wrapper
+        bat_content = f"""@echo off
+set TASAK_CONFIG_NAME={command_name}.yaml
+python "{py_path}" %*
+"""
+
+        with open(bat_path, "w") as f:
+            f.write(bat_content)
+
+        # Update command_path to point to the .bat file
+        command_path = bat_path
+
+    else:
+        # For Unix-like systems (Linux/Mac), create Python script with shebang
+        wrapper_content = f'''#!/usr/bin/env python3
 """
 Custom TASAK command: {command_name}
 This command uses {command_name}.yaml instead of tasak.yaml
@@ -65,12 +107,12 @@ result = subprocess.run(" ".join(cmd), shell=True)
 sys.exit(result.returncode)
 '''
 
-    # Write the wrapper script
-    with open(command_path, "w") as f:
-        f.write(wrapper_content)
+        # Write the wrapper script
+        with open(command_path, "w") as f:
+            f.write(wrapper_content)
 
-    # Make it executable
-    os.chmod(command_path, os.stat(command_path).st_mode | stat.S_IEXEC)
+        # Make it executable (only on Unix-like systems)
+        os.chmod(command_path, os.stat(command_path).st_mode | stat.S_IEXEC)
 
     # Create example config files
     config_locations = _create_example_configs(command_name)
@@ -90,11 +132,19 @@ sys.exit(result.returncode)
     print(f"   {command_name} --init       # Initialize config from template")
 
     if args.install_global:
-        print("\n💡 Tip: Make sure ~/.local/bin is in your PATH")
-        print('   export PATH="$HOME/.local/bin:$PATH"')
+        if is_windows:
+            print("\n💡 Tip: Make sure ~/.local/bin is in your PATH")
+            print("   Add to PATH in System Settings")
+        else:
+            print("\n💡 Tip: Make sure ~/.local/bin is in your PATH")
+            print('   export PATH="$HOME/.local/bin:$PATH"')
     else:
-        print("\n💡 Tip: Run from this directory or add to PATH:")
-        print(f"   ./{command_name}")
+        if is_windows:
+            print("\n💡 Tip: Run from this directory:")
+            print(f"   {command_name}")
+        else:
+            print("\n💡 Tip: Run from this directory or add to PATH:")
+            print(f"   ./{command_name}")
 
 
 def _create_example_configs(command_name: str) -> list[str]:
