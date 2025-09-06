@@ -3,20 +3,20 @@ import atexit
 import sys
 from typing import Any, Dict
 
-from .admin_commands import setup_admin_subparsers, handle_admin_command
-from .app_runner import run_cmd_app
-from .config import load_and_merge_configs
-from .python_plugins import integrate_plugins_into_config, run_python_plugin
-from .curated_app import run_curated_app
-from .mcp_client import run_mcp_app
-from .mcp_remote_runner import run_mcp_remote_app
-from .init_command import handle_init_command
+from tasak.admin_commands import setup_admin_subparsers, handle_admin_command
+from tasak.app_runner import run_cmd_app
+from tasak.config import load_and_merge_configs
+from tasak.python_plugins import integrate_plugins_into_config, run_python_plugin
+from tasak.curated_app import run_curated_app
+from tasak.mcp_client import run_mcp_app
+from tasak.mcp_remote_runner import run_mcp_remote_app
+from tasak.init_command import handle_init_command
 
 
 def _cleanup_pool():
     """Clean up the MCP Remote process pool on exit."""
     try:
-        from .mcp_remote_pool import MCPRemotePool
+        from tasak.mcp_remote_pool import MCPRemotePool
         import asyncio
 
         pool = MCPRemotePool()
