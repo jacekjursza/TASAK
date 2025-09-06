@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.1.2] - 2025-01-06
+
+### Fixed
+- **Binary builds** - Fixed PyInstaller workflow to properly build and attach binaries to releases
+  - Fixed artifact directory structure handling in release workflow
+  - Fixed checksum generation to work across all platforms (macOS/Linux/Windows)
+  - Separated PyInstaller commands for Windows and Unix systems
+  - Fixed MCP package installation during builds
+
+### Added
+- **Test workflow** - Added separate workflow for testing builds without PyPI publication
+
 ## [0.1.1] - 2025-01-06
 
 ### Fixed
