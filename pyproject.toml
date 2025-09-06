@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mcp = ["mcp-sdk"]
+mcp = ["mcp>=1.13.1"]
 
 [project.scripts]
 tasak = "tasak.main:main"
