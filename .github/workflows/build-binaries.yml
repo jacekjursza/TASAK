@@ -146,15 +146,22 @@ jobs:
         run: |
           cd binaries
           for dir in */; do
-            cd "$dir"
-            for file in *; do
-              if [ -f "$file" ]; then
-                sha256sum "$file" > "$file.sha256"
-                mv "$file" "../$file"
-                mv "$file.sha256" "../$file.sha256"
-              fi
-            done
-            cd ..
+            if [ -d "$dir" ]; then
+              cd "$dir"
+              for file in *; do
+                if [ -f "$file" ]; then
+                  # Use shasum on macOS, sha256sum on Linux
+                  if command -v sha256sum >/dev/null 2>&1; then
+                    sha256sum "$file" > "$file.sha256"
+                  else
+                    shasum -a 256 "$file" > "$file.sha256"
+                  fi
+                  mv "$file" "../$file"
+                  mv "$file.sha256" "../$file.sha256"
+                fi
+              done
+              cd ..
+            fi
           done
           cd ..
           ls -la binaries/
