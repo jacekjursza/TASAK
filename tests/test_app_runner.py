@@ -13,25 +13,23 @@ class TestRunCmdApp:
         app_config = {
             "name": "test_app",
             "type": "cmd",
-            "meta": {"command": "echo hello"},
+            "command": "echo hello",
         }
         app_args = ["--flag", "value"]
 
         run_cmd_app(app_config, app_args)
 
-        mock_run_proxy.assert_called_once_with(
-            {"command": "echo hello"}, ["--flag", "value"]
-        )
+        mock_run_proxy.assert_called_once_with(app_config, ["--flag", "value"])
 
     @patch("tasak.app_runner._run_proxy_mode")
-    def test_run_cmd_app_with_missing_meta(self, mock_run_proxy):
-        """Test run_cmd_app with missing meta section."""
+    def test_run_cmd_app_with_missing_command(self, mock_run_proxy):
+        """Test run_cmd_app with missing command."""
         app_config = {"name": "test_app", "type": "cmd"}
         app_args = []
 
         run_cmd_app(app_config, app_args)
 
-        mock_run_proxy.assert_called_once_with({}, [])
+        mock_run_proxy.assert_called_once_with(app_config, [])
 
 
 class TestRunProxyMode:
@@ -40,41 +38,41 @@ class TestRunProxyMode:
     @patch("tasak.app_runner._execute_command")
     def test_proxy_mode_with_string_command(self, mock_execute):
         """Test proxy mode with command as string."""
-        meta = {"command": "git status"}
+        app_config = {"command": "git status"}
         app_args = ["--short"]
 
-        _run_proxy_mode(meta, app_args)
+        _run_proxy_mode(app_config, app_args)
 
         mock_execute.assert_called_once_with(["git", "status", "--short"])
 
     @patch("tasak.app_runner._execute_command")
     def test_proxy_mode_with_list_command(self, mock_execute):
         """Test proxy mode with command as list."""
-        meta = {"command": ["docker", "run", "ubuntu"]}
+        app_config = {"command": ["docker", "run", "ubuntu"]}
         app_args = ["--rm", "-it"]
 
-        _run_proxy_mode(meta, app_args)
+        _run_proxy_mode(app_config, app_args)
 
         mock_execute.assert_called_once_with(["docker", "run", "ubuntu", "--rm", "-it"])
 
     @patch("tasak.app_runner._execute_command")
     def test_proxy_mode_with_no_args(self, mock_execute):
         """Test proxy mode with no additional arguments."""
-        meta = {"command": "ls"}
+        app_config = {"command": "ls"}
         app_args = []
 
-        _run_proxy_mode(meta, app_args)
+        _run_proxy_mode(app_config, app_args)
 
         mock_execute.assert_called_once_with(["ls"])
 
     def test_proxy_mode_missing_command(self):
         """Test proxy mode when command is missing."""
-        meta = {}
+        app_config = {}
         app_args = ["--flag"]
 
         with patch("sys.exit") as mock_exit:
             with patch("builtins.print") as mock_print:
-                _run_proxy_mode(meta, app_args)
+                _run_proxy_mode(app_config, app_args)
 
                 # Check error message was printed and exit was called
                 mock_print.assert_called_once()
@@ -83,12 +81,12 @@ class TestRunProxyMode:
 
     def test_proxy_mode_empty_command(self):
         """Test proxy mode when command is empty string."""
-        meta = {"command": ""}
+        app_config = {"command": ""}
         app_args = []
 
         with patch("sys.exit") as mock_exit:
             with patch("builtins.print") as mock_print:
-                _run_proxy_mode(meta, app_args)
+                _run_proxy_mode(app_config, app_args)
 
                 # Empty string is falsy, so should print error and exit
                 mock_print.assert_called_once()
@@ -151,7 +149,10 @@ class TestExecuteCommand:
     @patch("sys.exit")
     @patch("sys.stderr", new_callable=MagicMock)
     def test_execute_command_keyboard_interrupt(
-        self, mock_stderr, mock_exit, mock_popen
+        self,
+        mock_stderr,
+        mock_exit,
+        mock_popen,
     ):
         """Test command execution interrupted by user."""
         mock_process = MagicMock()
@@ -167,7 +168,10 @@ class TestExecuteCommand:
     @patch("sys.exit")
     @patch("sys.stderr", new_callable=MagicMock)
     def test_execute_command_generic_exception(
-        self, mock_stderr, mock_exit, mock_popen
+        self,
+        mock_stderr,
+        mock_exit,
+        mock_popen,
     ):
         """Test command execution with unexpected exception."""
         mock_popen.side_effect = Exception("Unexpected error")
@@ -229,7 +233,7 @@ class TestIntegration:
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
-        app_config = {"meta": {"command": "echo Hello, World!"}}
+        app_config = {"command": "echo Hello, World!"}
 
         run_cmd_app(app_config, [])
 
@@ -246,7 +250,7 @@ class TestIntegration:
         mock_process.returncode = 1
         mock_popen.return_value = mock_process
 
-        app_config = {"meta": {"command": ["false"]}}
+        app_config = {"command": ["false"]}
 
         run_cmd_app(app_config, [])
 

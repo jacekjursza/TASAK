@@ -6,6 +6,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 import requests
+import asyncio
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client, StdioServerParameters
+
 from .mcp_real_client import MCPRealClient
 from .schema_manager import SchemaManager
 
@@ -17,6 +21,22 @@ ATLASSIAN_CLIENT_ID = "5Dzgchq9CCu2EIgv"
 
 def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     """Main entry point for running an MCP application."""
+    if "--interactive" in app_args:
+        # Interactive mode requires special handling with asyncio
+        try:
+            mcp_config_path = app_config.get("config")
+            if not mcp_config_path:
+                print(
+                    f"Error: 'config' not specified for MCP app '{app_name}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            mcp_config = _load_mcp_config(mcp_config_path)
+            asyncio.run(run_interactive_session_async(app_name, mcp_config))
+        except KeyboardInterrupt:
+            print("\nInteractive session terminated by user.", file=sys.stderr)
+        return
+
     if "--clear-cache" in app_args:
         _clear_cache(app_name, app_config)
         return
@@ -84,6 +104,30 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         if k != "tool_name" and k not in TASAK_FLAGS
     }
 
+    # Get the tool schema and convert argument types
+    tool_schema = next((t for t in tool_defs if t["name"] == tool_name), None)
+    if tool_schema:
+        for arg_name, arg_value in tool_args.items():
+            if arg_value is None:
+                continue
+            param_schema = (
+                tool_schema.get("input_schema", {}).get("properties", {}).get(arg_name)
+            )
+            if param_schema:
+                param_type = param_schema.get("type")
+                try:
+                    if param_type == "integer":
+                        tool_args[arg_name] = int(arg_value)
+                    elif param_type == "number":
+                        tool_args[arg_name] = float(arg_value)
+                    elif param_type == "boolean":
+                        tool_args[arg_name] = bool(arg_value)
+                except (ValueError, TypeError):
+                    print(
+                        f"Warning: Could not convert argument '{arg_name}' to type '{param_type}'",
+                        file=sys.stderr,
+                    )
+
     # Call the tool using real MCP client
     client = MCPRealClient(app_name, app_config)
     try:
@@ -97,6 +141,122 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         # This should rarely happen as MCPRealClient handles most errors
         print(f"Error executing tool: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+async def run_interactive_session_async(app_name: str, mcp_config: Dict[str, Any]):
+    """Runs a persistent, asynchronous interactive session with an MCP app."""
+    command = mcp_config.get("command")
+    if not command:
+        print("Error: 'command' not specified in MCP config.", file=sys.stderr)
+        return
+
+    env = mcp_config.get("env", {})
+    full_env = os.environ.copy()
+    full_env.update(env)
+
+    server_params = StdioServerParameters(
+        command=command[0],
+        args=command[1:] if len(command) > 1 else [],
+        env=full_env,
+    )
+
+    is_tty = sys.stdin.isatty()
+    if is_tty:
+        print(
+            f"Starting interactive session with '{app_name}'. Type 'exit' or Ctrl+D to end."
+        )
+
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                # Get tool definitions
+                response = await session.list_tools()
+                tool_defs = [
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema,
+                    }
+                    for tool in response.tools
+                ]
+
+                if not tool_defs:
+                    print(
+                        f"Warning: No tools reported by '{app_name}'.", file=sys.stderr
+                    )
+
+                # Main interactive loop
+                loop = asyncio.get_running_loop()
+                while True:
+                    if is_tty:
+                        prompt = f"{app_name}> "
+                        print(prompt, end="", flush=True)
+
+                    try:
+                        line = await loop.run_in_executor(None, sys.stdin.readline)
+                    except asyncio.CancelledError:
+                        break  # Loop cancelled from outside
+
+                    if not line:  # EOF (Ctrl+D)
+                        break
+
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.lower() == "exit":
+                        break
+
+                    # Parse command and arguments
+                    parts = line.split()
+                    tool_name = parts[0]
+                    tool_args_list = parts[1:]
+
+                    tool_schema = next(
+                        (t for t in tool_defs if t["name"] == tool_name), None
+                    )
+                    if not tool_schema:
+                        print(f"Error: Unknown tool '{tool_name}'", file=sys.stderr)
+                        continue
+
+                    # Use argparse to parse tool arguments
+                    parser = argparse.ArgumentParser(prog=tool_name, add_help=False)
+                    input_schema = tool_schema.get("input_schema", {})
+                    for prop_name, prop_details in input_schema.get(
+                        "properties", {}
+                    ).items():
+                        parser.add_argument(f"--{prop_name}")
+
+                    try:
+                        parsed_args, _ = parser.parse_known_args(tool_args_list)
+                        tool_args = {
+                            k: v for k, v in vars(parsed_args).items() if v is not None
+                        }
+
+                        # Call the tool
+                        result = await session.call_tool(tool_name, tool_args)
+
+                        # Print result
+                        if result.content and len(result.content) > 0:
+                            content = result.content[0]
+                            if hasattr(content, "text"):
+                                print(content.text)
+                            elif hasattr(content, "data"):
+                                print(json.dumps(content.data, indent=2))
+                        else:
+                            print(f"Tool '{tool_name}' executed.")
+
+                    except Exception as e:
+                        print(f"Error calling tool '{tool_name}': {e}", file=sys.stderr)
+
+    except (ConnectionError, TimeoutError, OSError) as e:
+        print(f"Error connecting to MCP server: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+
+    if is_tty:
+        print("\nExiting interactive session.")
 
 
 def _run_proxy_mode(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
@@ -189,9 +349,6 @@ def _refresh_token(app_name: str, refresh_token: str) -> str:
             file=sys.stderr,
         )
         sys.exit(1)
-
-
-# ... (The rest of the functions: _build_parser, _load_mcp_config, etc. remain largely the same) ...
 
 
 def _clear_cache(app_name: str, app_config: Dict[str, Any]):

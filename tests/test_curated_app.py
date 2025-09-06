@@ -16,31 +16,31 @@ class TestVariableInterpolation(unittest.TestCase):
     def test_simple_interpolation(self):
         template = "Hello ${name}"
         context = {"name": "World"}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         self.assertEqual(result, "Hello World")
 
     def test_default_value_interpolation(self):
         template = "Hello ${name:-Guest}"
         context = {}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         self.assertEqual(result, "Hello Guest")
 
     def test_existing_value_overrides_default(self):
         template = "Hello ${name:-Guest}"
         context = {"name": "Alice"}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         self.assertEqual(result, "Hello Alice")
 
     def test_list_interpolation(self):
         template = ["echo", "${message}"]
         context = {"message": "Hello"}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         self.assertEqual(result, ["echo", "Hello"])
 
     def test_dict_interpolation(self):
         template = {"project": "${project_name}", "priority": "${priority:-low}"}
         context = {"project_name": "TASAK"}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         self.assertEqual(result, {"project": "TASAK", "priority": "low"})
 
     def test_nested_interpolation(self):
@@ -49,7 +49,7 @@ class TestVariableInterpolation(unittest.TestCase):
             "args": {"level": "${level:-info}"},
         }
         context = {"message": "Test"}
-        result = self.app._interpolate(template, context)
+        result, _ = self.app._interpolate(template, context)
         expected = {"command": ["echo", "Test"], "args": {"level": "info"}}
         self.assertEqual(result, expected)
 
@@ -113,7 +113,7 @@ class TestBackendExecution(unittest.TestCase):
         app.run(["test"])
 
         mock_run.assert_called_once_with(
-            ["echo", "hello"], capture_output=False, text=True
+            ["echo", "hello"], capture_output=True, text=True
         )
 
     @patch("subprocess.run")
@@ -124,7 +124,7 @@ class TestBackendExecution(unittest.TestCase):
             "commands": [
                 {
                     "name": "greet",
-                    "backend": {"type": "cmd", "command": ["echo", "Hello ${name}"]},
+                    "backend": {"type": "cmd", "command": ["echo", "Hello"]},
                     "params": [{"name": "--name", "required": True}],
                 }
             ]
@@ -133,7 +133,7 @@ class TestBackendExecution(unittest.TestCase):
         app.run(["greet", "--name", "Alice"])
 
         mock_run.assert_called_once_with(
-            ["echo", "Hello Alice"], capture_output=False, text=True
+            ["echo", "Hello", "--name", "Alice"], capture_output=True, text=True
         )
 
     @patch("subprocess.run")
@@ -159,8 +159,8 @@ class TestBackendExecution(unittest.TestCase):
 
         # Should execute both commands in sequence
         self.assertEqual(mock_run.call_count, 2)
-        mock_run.assert_any_call(["echo", "step1"], capture_output=False, text=True)
-        mock_run.assert_any_call(["echo", "step2"], capture_output=False, text=True)
+        mock_run.assert_any_call(["echo", "step1"], capture_output=True, text=True)
+        mock_run.assert_any_call(["echo", "step2"], capture_output=True, text=True)
 
     @patch("subprocess.run")
     def test_conditional_backend(self, mock_run):
@@ -188,12 +188,16 @@ class TestBackendExecution(unittest.TestCase):
 
         # Test dev branch
         app.run(["deploy", "--env", "dev"])
-        mock_run.assert_called_with(["echo", "dev"], capture_output=False, text=True)
+        mock_run.assert_called_with(
+            ["echo", "dev", "--env", "dev"], capture_output=True, text=True
+        )
 
         # Test prod branch
         mock_run.reset_mock()
         app.run(["deploy", "--env", "prod"])
-        mock_run.assert_called_with(["echo", "prod"], capture_output=False, text=True)
+        mock_run.assert_called_with(
+            ["echo", "prod", "--env", "prod"], capture_output=True, text=True
+        )
 
     @patch("subprocess.Popen")
     def test_async_command_execution(self, mock_popen):
@@ -248,7 +252,7 @@ class TestParameterHandling(unittest.TestCase):
             "commands": [
                 {
                     "name": "create",
-                    "backend": {"type": "cmd", "command": ["touch", "${file}"]},
+                    "backend": {"type": "cmd", "command": ["touch"]},
                     "params": [{"name": "--file", "required": True}],
                 }
             ]
@@ -268,7 +272,7 @@ class TestParameterHandling(unittest.TestCase):
             "commands": [
                 {
                     "name": "set",
-                    "backend": {"type": "cmd", "command": ["echo", "${level}"]},
+                    "backend": {"type": "cmd", "command": ["echo"]},
                     "params": [
                         {
                             "name": "--level",
@@ -283,7 +287,9 @@ class TestParameterHandling(unittest.TestCase):
 
         # Should accept valid choice
         app.run(["set", "--level", "high"])
-        mock_run.assert_called_with(["echo", "high"], capture_output=False, text=True)
+        mock_run.assert_called_with(
+            ["echo", "--level", "high"], capture_output=True, text=True
+        )
 
         # Should reject invalid choice
         with self.assertRaises(SystemExit):
@@ -298,7 +304,7 @@ class TestParameterHandling(unittest.TestCase):
             "commands": [
                 {
                     "name": "list",
-                    "backend": {"type": "cmd", "command": ["ls", "${path}"]},
+                    "backend": {"type": "cmd", "command": ["ls"]},
                     "params": [{"name": "--path", "default": "/tmp"}],
                 }
             ]
@@ -307,12 +313,16 @@ class TestParameterHandling(unittest.TestCase):
 
         # Should use default when not provided
         app.run(["list"])
-        mock_run.assert_called_with(["ls", "/tmp"], capture_output=False, text=True)
+        mock_run.assert_called_with(
+            ["ls", "--path", "/tmp"], capture_output=True, text=True
+        )
 
         # Should override default when provided
         mock_run.reset_mock()
         app.run(["list", "--path", "/home"])
-        mock_run.assert_called_with(["ls", "/home"], capture_output=False, text=True)
+        mock_run.assert_called_with(
+            ["ls", "--path", "/home"], capture_output=True, text=True
+        )
 
 
 class TestHelpDisplay(unittest.TestCase):

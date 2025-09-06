@@ -1,0 +1,7 @@
+{
+    "transport": "stdio",
+    "command": ["python", "tests/e2e/mini-apps/simple_mcp_server.py"],
+    "env": {
+        "PYTHONPATH": "."
+    }
+}

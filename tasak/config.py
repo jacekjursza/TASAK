@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import yaml
 
@@ -33,10 +34,28 @@ def find_local_config_paths() -> list[Path]:
 
 
 def load_and_merge_configs() -> dict:
-    """Loads all configs and merges them."""
+    """
+    Loads all configs and merges them.
+    The loading priority is as follows:
+    1. If TASAK_CONFIG environment variable is set, load only that file.
+    2. Otherwise, load global config (~/.tasak/tasak.yaml).
+    3. Then, load local configs (tasak.yaml or .tasak/tasak.yaml) from the
+       current directory up to the root, merging them in order.
+    """
+    # 1. Check for TASAK_CONFIG environment variable
+    if config_path_str := os.environ.get("TASAK_CONFIG"):
+        config_path = Path(config_path_str)
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                return yaml.safe_load(f) or {}
+        else:
+            # In case the env var points to a non-existent file
+            return {}
+
+    # If no env var, proceed with the original logic
     merged_config = {}
 
-    # 1. Load global config
+    # 2. Load global config
     global_config_path = get_global_config_path()
     if global_config_path:
         with open(global_config_path, "r") as f:
@@ -44,7 +63,7 @@ def load_and_merge_configs() -> dict:
             if global_config:
                 merged_config.update(global_config)
 
-    # 2. Load and merge local configs
+    # 3. Load and merge local configs
     local_config_paths = find_local_config_paths()
     for path in local_config_paths:
         with open(path, "r") as f:

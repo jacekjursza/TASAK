@@ -239,7 +239,7 @@ class MCPRealClient:
     async def _call_tool_async(
         self, tool_name: str, arguments: Dict[str, Any], headers: Dict[str, str]
     ) -> Any:
-        """Async function to call a tool on MCP server."""
+        """Async function to call a tool on the MCP server."""
         transport = self.mcp_config.get("transport", "sse")
 
         try:

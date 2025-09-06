@@ -5,15 +5,16 @@ from typing import Any, Dict, List
 
 def run_cmd_app(app_config: Dict[str, Any], app_args: List[str]):
     """Runs a 'cmd' type application in proxy mode."""
-    meta = app_config.get("meta", {})
     # Only proxy mode is supported for cmd apps
     # For complex workflows, use type: curated instead
-    _run_proxy_mode(meta, app_args)
+    _run_proxy_mode(app_config, app_args)
 
 
-def _run_proxy_mode(meta: Dict[str, Any], app_args: List[str]):
+def _run_proxy_mode(app_config: Dict[str, Any], app_args: List[str]):
     """Executes the command in proxy mode."""
-    base_command = meta.get("command")
+    base_command = app_config.get("command") or app_config.get("meta", {}).get(
+        "command"
+    )
     if not base_command:
         print(
             "'command' not specified in app configuration for proxy mode.",

@@ -49,7 +49,8 @@ class CuratedApp:
         self.commands = self._build_commands(config.get("commands", []))
 
     def _build_commands(
-        self, commands_config: List[Dict[str, Any]]
+        self,
+        commands_config: List[Dict[str, Any]],
     ) -> Dict[str, CuratedCommand]:
         """Build command structure from configuration."""
         commands = {}
@@ -119,6 +120,8 @@ class CuratedApp:
                 prog=f"{self.app_name} {command.name}", description=command.description
             )
 
+            type_map = {"str": str, "int": int, "float": float, "bool": bool}
+
             for param in command.params:
                 param_copy = param.copy()
                 param_name = param_copy.pop("name")
@@ -127,6 +130,13 @@ class CuratedApp:
                 required = param_copy.pop("required", False)
                 help_text = param_copy.pop("help", None)
 
+                if param_copy.get("action") == "store_true":
+                    param_copy.pop("type", None)  # Remove type for store_true
+
+                param_type_str = param_copy.get("type")
+                if param_type_str in type_map:
+                    param_copy["type"] = type_map[param_type_str]
+
                 if required:
                     parser.add_argument(
                         param_name, help=help_text, required=True, **param_copy
@@ -134,7 +144,13 @@ class CuratedApp:
                 else:
                     parser.add_argument(param_name, help=help_text, **param_copy)
 
-            parsed_args = parser.parse_args(args)
+            parsed_args, unknown = parser.parse_known_args(args)
+            if unknown:
+                print(
+                    f"unrecognized arguments: {' '.join(unknown)}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
             context = vars(parsed_args)
 
         # Execute backend
@@ -160,10 +176,19 @@ class CuratedApp:
             sys.exit(1)
 
         # Interpolate variables
-        interpolated_command = self._interpolate(command, context)
+        interpolated_command, used_keys = self._interpolate(command, context)
 
         if isinstance(interpolated_command, str):
             interpolated_command = interpolated_command.split()
+
+        # Add arguments from context
+        for key, value in context.items():
+            if key not in used_keys:
+                if value is True:
+                    interpolated_command.append(f"--{key}")
+                elif value is not False and value is not None:
+                    interpolated_command.append(f"--{key}")
+                    interpolated_command.append(str(value))
 
         # Execute command
         try:
@@ -175,9 +200,15 @@ class CuratedApp:
                 # Run and wait
                 result = subprocess.run(
                     interpolated_command,
-                    capture_output=backend.get("capture") is not None,
+                    capture_output=True,
                     text=True,
                 )
+
+                if backend.get("capture") is None:
+                    if result.stdout:
+                        print(result.stdout, end="")
+                    if result.stderr:
+                        print(result.stderr, file=sys.stderr, end="")
 
                 if backend.get("required") and result.returncode != 0:
                     print(
@@ -210,7 +241,7 @@ class CuratedApp:
             sys.exit(1)
 
         # Interpolate arguments
-        interpolated_args = self._interpolate(args, context)
+        interpolated_args, _ = self._interpolate(args, context)
 
         # Get MCP client for the app
         client = self._get_mcp_client(app)
@@ -244,7 +275,9 @@ class CuratedApp:
                 sys.exit(1)
 
     def _execute_composite_backend(
-        self, backend: Dict[str, Any], context: Dict[str, Any]
+        self,
+        backend: Dict[str, Any],
+        context: Dict[str, Any],
     ):
         """Execute multiple steps in sequence or parallel."""
         steps = backend.get("steps", [])
@@ -269,7 +302,9 @@ class CuratedApp:
                     self._execute_composite_backend(step, context)
 
     def _execute_conditional_backend(
-        self, backend: Dict[str, Any], context: Dict[str, Any]
+        self,
+        backend: Dict[str, Any],
+        context: Dict[str, Any],
     ):
         """Execute different backends based on conditions."""
         condition = backend.get("condition")
@@ -280,7 +315,7 @@ class CuratedApp:
             sys.exit(1)
 
         # Evaluate condition (simple variable lookup for now)
-        condition_value = self._interpolate(condition, context)
+        condition_value, _ = self._interpolate(condition, context)
 
         if condition_value in branches:
             branch_backend = branches[condition_value]
@@ -323,8 +358,11 @@ class CuratedApp:
         else:
             return None
 
-    def _interpolate(self, template: Any, context: Dict[str, Any]) -> Any:
+    def _interpolate(
+        self, template: Any, context: Dict[str, Any]
+    ) -> tuple[Any, list[str]]:
         """Replace ${var} with values from context."""
+        used_keys = []
         if isinstance(template, str):
             # Handle ${var:-default} syntax
             pattern = r"\$\{([^}]+)\}"
@@ -333,18 +371,30 @@ class CuratedApp:
                 expr = match.group(1)
                 if ":-" in expr:
                     var, default = expr.split(":-", 1)
+                    used_keys.append(var)
                     return str(context.get(var, default))
+                used_keys.append(expr)
                 return str(context.get(expr, ""))
 
-            return re.sub(pattern, replacer, template)
+            return re.sub(pattern, replacer, template), used_keys
 
         elif isinstance(template, dict):
-            return {k: self._interpolate(v, context) for k, v in template.items()}
+            new_dict = {}
+            for k, v in template.items():
+                new_v, keys = self._interpolate(v, context)
+                new_dict[k] = new_v
+                used_keys.extend(keys)
+            return new_dict, used_keys
 
         elif isinstance(template, list):
-            return [self._interpolate(item, context) for item in template]
+            new_list = []
+            for item in template:
+                new_item, keys = self._interpolate(item, context)
+                new_list.append(new_item)
+                used_keys.extend(keys)
+            return new_list, used_keys
 
-        return template
+        return template, used_keys
 
     def _show_help(self):
         """Show help for the curated app."""
