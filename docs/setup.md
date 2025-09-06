@@ -1,103 +1,138 @@
-# Installation & Setup
+# Get TASAK Running in 2 Minutes
 ## Contents
 
-- [Prerequisites](#prerequisites)
-- [Installation Methods](#installation-methods)
-  - [Option 1: Install via pipx (Recommended)](#option-1-install-via-pipx-recommended)
-  - [Option 2: Install via pip](#option-2-install-via-pip)
-  - [Option 3: Development Installation](#option-3-development-installation)
-- [Verify Installation](#verify-installation)
-- [Configuration System](#configuration-system)
-  - [Configuration Hierarchy](#configuration-hierarchy)
-  - [How Config Merging Works](#how-config-merging-works)
-  - [Initial Setup](#initial-setup)
-  - [Project-Specific Configuration](#project-specific-configuration)
-  - [Configuration Priority Rules](#configuration-priority-rules)
-  - [Best Practices](#best-practices)
-- [Environment Variables](#environment-variables)
-- [Directory Structure](#directory-structure)
-- [Troubleshooting](#troubleshooting)
-  - [Command not found](#command-not-found)
-  - [Configuration not loading](#configuration-not-loading)
-  - [Apps not appearing](#apps-not-appearing)
-- [Next Steps](#next-steps)
+- [🚀 Quick Start (30 seconds)](#-quick-start-30-seconds)
+- [🎯 Your First Power Tool (1 minute)](#-your-first-power-tool-1-minute)
+- [📦 Installation Options](#-installation-options)
+- [🏛️ Configuration Magic](#-configuration-magic)
+- [🔧 Troubleshooting](#-troubleshooting)
+- [🚀 What's Next?](#-whats-next)
 
+## 🚀 Quick Start (30 seconds)
 
-## Prerequisites
+### Prerequisites
+- Python 3.11+ (check with `python --version`)
+- That's it! 🎉
 
-- Python 3.11 or higher
-- pip (Python package manager)
-- Git (for installation from repository)
-
-## Installation Methods
-
-### Option 1: Install via pipx (Recommended)
-
-The cleanest way to install TASAK is using `pipx`, which creates an isolated environment:
+### One-Line Install
 
 ```bash
-# Install pipx if you don't have it
-python -m pip install --user pipx
-python -m pipx ensurepath
-
-# Install TASAK
 pipx install git+https://github.com/jacekjursza/TASAK.git
 ```
 
-### Option 2: Install via pip
+No pipx? No problem:
+```bash
+python -m pip install --user pipx && python -m pipx ensurepath
+# Then run the install command above
+```
 
-For direct installation into your Python environment:
+### Verify It Works
 
+```bash
+tasak
+# You'll see: "TASAK - The Agent's Swiss Army Knife"
+```
+
+## 🎯 Your First Power Tool (1 minute)
+
+Let's create your first AI-accessible command in 3 steps:
+
+### Step 1: Create Config Directory
+```bash
+mkdir -p ~/.tasak
+```
+
+### Step 2: Add Your First Tool
+```bash
+cat > ~/.tasak/tasak.yaml << 'EOF'
+header: "My AI Toolkit"
+
+apps_config:
+  enabled_apps:
+    - hello
+    - dev
+    - test
+
+# Simple greeting
+hello:
+  name: "Hello World"
+  type: "cmd"
+  meta:
+    command: "echo 'Hello from TASAK! Your AI assistant can now run commands!'"
+
+# Start your dev environment
+dev:
+  name: "Start Development"
+  type: "cmd"
+  meta:
+    command: "echo 'Starting dev server...' && npm run dev"
+
+# Run tests
+test:
+  name: "Run Tests"
+  type: "cmd"
+  meta:
+    command: "npm test"
+EOF
+```
+
+### Step 3: Test It!
+```bash
+tasak hello
+# Output: Hello from TASAK! Your AI assistant can now run commands!
+
+tasak
+# Now shows your available commands!
+```
+
+🎆 **Congratulations!** Your AI assistant can now use these commands!
+
+## 📦 Installation Options
+
+### Best Option: pipx (Isolated & Clean)
+```bash
+pipx install git+https://github.com/jacekjursza/TASAK.git
+```
+
+### Alternative: Direct pip
 ```bash
 pip install git+https://github.com/jacekjursza/TASAK.git
 ```
 
-### Option 3: Development Installation
-
-For contributors or local development:
-
+### For Contributors: Development Mode
 ```bash
-# Clone the repository
 git clone https://github.com/jacekjursza/TASAK.git
 cd TASAK
-
-# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install in development mode
+source .venv/bin/activate
 pip install -e .
 ```
 
-## Verify Installation
+## 🏛️ Configuration Magic
 
-After installation, verify TASAK is working:
+### The Power of Hierarchical Config
 
-```bash
-# Check version and list available apps
-tasak
+TASAK's secret sauce is its **smart configuration system**:
 
-# Should display something like:
-# TASAK - The Agent's Swiss Army Knife
-# Available apps: (none configured yet)
+```
+~/.tasak/tasak.yaml          ← Your personal toolkit (global)
+    +
+./project/tasak.yaml         ← Project-specific tools (local)
+    =
+Your AI's Complete Toolkit   ← Best of both worlds!
 ```
 
-## Configuration System
+### How It Works
 
-TASAK uses a **hierarchical configuration system** that provides flexibility and organization for your tools.
+1. **Global Config** (`~/.tasak/tasak.yaml`)
+   - Your personal command palette
+   - Tools you use everywhere
+   - Examples: format code, check weather, system info
 
-### Configuration Hierarchy
-
-Configurations are loaded and merged in the following order, with later configs overriding earlier ones:
-
-1. **Global Configuration**: `~/.tasak/tasak.yaml`
-   - Shared across all projects
-   - Perfect for common tools you use everywhere
-   - Examples: calculator, weather, system utilities
-
-2. **Local Configuration**: Project-specific settings
-   - TASAK searches upward from current directory to root
-   - Looks for BOTH: `tasak.yaml` AND `.tasak/tasak.yaml` in each directory
+2. **Project Config** (in any parent directory)
+   - Project-specific commands
+   - Overrides global settings
+   - Can be `tasak.yaml` or `.tasak/tasak.yaml`
    - Collects ALL configs found in the hierarchy
    - Merges them in order: root → current directory
    - Ideal for project-specific tools

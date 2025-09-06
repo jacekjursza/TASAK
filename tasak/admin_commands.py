@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .auth import run_auth_app
+from .python_plugins import discover_python_plugins, get_plugin_search_dirs
 from .mcp_real_client import MCPRealClient
 from .schema_manager import SchemaManager
 
@@ -72,6 +73,32 @@ def setup_admin_subparsers(subparsers):
         "--verbose", "-v", action="store_true", help="Show detailed information"
     )
 
+    # Plugins management subcommands
+    plugins_parser = subparsers.add_parser("plugins", help="Manage Python plugins")
+    plugins_sub = plugins_parser.add_subparsers(
+        dest="plugins_command", help="Plugins command to execute"
+    )
+
+    plugins_list = plugins_sub.add_parser("list", help="List discovered Python plugins")
+    plugins_list.add_argument(
+        "--verbose", "-v", action="store_true", help="Show detailed plugin info"
+    )
+
+    plugins_sub.add_parser("ladder", help="Show plugin search directories in order")
+
+    plugins_scaffold = plugins_sub.add_parser(
+        "scaffold", help="Create a plugin skeleton in local directory"
+    )
+    plugins_scaffold.add_argument("name", help="Plugin command name (filename)")
+    plugins_scaffold.add_argument(
+        "--dir",
+        dest="target_dir",
+        help="Directory to place the plugin (defaults to ./.tasak/plugins/python)",
+    )
+    plugins_scaffold.add_argument(
+        "--description", "-d", default="Example plugin", help="Plugin description"
+    )
+
 
 def handle_admin_command(args: argparse.Namespace, config: Dict[str, Any]):
     """Handle admin subcommand execution."""
@@ -91,9 +118,85 @@ def handle_admin_command(args: argparse.Namespace, config: Dict[str, Any]):
         handle_info(args, config)
     elif args.admin_command == "list":
         handle_list(args, config)
+    elif args.admin_command == "plugins":
+        handle_plugins(args, config)
     else:
         print(f"Unknown admin command: {args.admin_command}", file=sys.stderr)
         sys.exit(1)
+
+
+def handle_plugins(args: argparse.Namespace, config: Dict[str, Any]):
+    """Handle plugin-related admin commands."""
+    if not getattr(args, "plugins_command", None):
+        print(
+            "Error: No plugins subcommand specified. Use --help for usage.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if args.plugins_command == "ladder":
+        dirs = get_plugin_search_dirs(config)
+        if not dirs:
+            print("No plugin directories found.")
+            return
+        print("Plugin search directories (in order):")
+        for d in dirs:
+            print(f"  - {d}")
+        return
+
+    if args.plugins_command == "list":
+        plugins = discover_python_plugins(config)
+        enabled = set((config.get("apps_config") or {}).get("enabled_apps", []) or [])
+        auto_enable_all = bool(
+            ((config.get("plugins") or {}).get("python") or {}).get(
+                "auto_enable_all", False
+            )
+        )
+
+        if not plugins:
+            print("No Python plugins discovered.")
+            return
+        print("Discovered Python plugins:")
+        for name in sorted(plugins):
+            info = plugins[name]
+            is_enabled = (name in enabled) or auto_enable_all
+            status = "enabled" if is_enabled else "disabled"
+            print(f"  - {name} [{status}] -> {info.get('path')}")
+            if args.verbose:
+                print(f"      desc: {info.get('description', '')}")
+        return
+
+    if args.plugins_command == "scaffold":
+        name = args.name
+        target_dir = (
+            Path(args.target_dir)
+            if args.target_dir
+            else Path.cwd() / ".tasak" / "plugins" / "python"
+        )
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{name}.py"
+        if target.exists():
+            print(f"Error: Plugin file already exists: {target}", file=sys.stderr)
+            sys.exit(1)
+
+        description = args.description
+        content = (
+            f'DESCRIPTION = "{description}"\n\n'
+            "import argparse\n\n\n"
+            "def main():\n"
+            f'    parser = argparse.ArgumentParser(prog="{name}", description=DESCRIPTION)\n'
+            '    parser.add_argument("--name", default="World", help="Name to greet")\n'
+            "    args = parser.parse_args()\n"
+            '    print(f"Hello {args.name}")\n\n\n'
+            'if __name__ == "__main__":\n'
+            "    main()\n"
+        )
+        target.write_text(content, encoding="utf-8")
+        print(f"Created plugin skeleton: {target}")
+        return
+
+    print(f"Unknown plugins subcommand: {args.plugins_command}", file=sys.stderr)
+    sys.exit(1)
 
 
 def handle_auth(args: argparse.Namespace, config: Dict[str, Any]):
