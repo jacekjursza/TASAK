@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tasak"
-version = "0.1.2"
+version = "0.1.3"
 authors = [
   { name="Jacek Jursza", email="okhan.pl@gmail.com" },
 ]
