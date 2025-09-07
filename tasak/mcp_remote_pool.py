@@ -9,8 +9,12 @@ import asyncio
 import logging
 import threading
 import time
+import os
+import sys
+import atexit as _atexit_mod
+from concurrent.futures import Future as _CFuture
 from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, TextIO
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters
@@ -29,6 +33,8 @@ class PooledProcess:
     app_name: str
     server_url: str
     stdio_context: Any = None  # Store the stdio_client context manager
+    # Optional sink for child process stderr; closed on termination
+    errlog_handle: Optional[TextIO] = None
 
     @property
     def is_alive(self) -> bool:
@@ -103,7 +109,7 @@ class MCPRemotePool:
         self._cleanup_task = self._loop.create_task(_periodic())
         self._loop.run_forever()
 
-    def _submit(self, coro: asyncio.coroutines) -> "concurrent.futures.Future":
+    def _submit(self, coro: asyncio.coroutines) -> _CFuture:
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     async def _cleanup_idle_processes(self):
@@ -164,8 +170,19 @@ class MCPRemotePool:
             command="npx", args=["-y", "mcp-remote", server_url], env=None
         )
 
+        # Silence noisy mcp-remote stderr unless in TASAK_DEBUG/TASAK_VERBOSE
+        verbose = (os.environ.get("TASAK_DEBUG") == "1") or (
+            os.environ.get("TASAK_VERBOSE") == "1"
+        )
+        err_sink: TextIO
+        if verbose:
+            err_sink = sys.stderr
+        else:
+            # Use a devnull sink to discard stderr without leaking fds indefinitely
+            err_sink = open(os.devnull, "w")
+
         # Create and store the context manager
-        stdio_ctx = stdio_client(server_params)
+        stdio_ctx = stdio_client(server_params, errlog=err_sink)
         read, write = await stdio_ctx.__aenter__()
 
         # Create MCP session with proper streams and start background receive loop
@@ -184,6 +201,7 @@ class MCPRemotePool:
             app_name=app_name,
             server_url=server_url,
             stdio_context=stdio_ctx,  # Keep the context alive
+            errlog_handle=None if verbose else err_sink,
         )
 
         self._pool[app_name] = pooled
@@ -251,6 +269,13 @@ class MCPRemotePool:
                 await process_info.stdio_context.__aexit__(None, None, None)
             except Exception as e:
                 logger.debug(f"Error closing stdio context for {app_name}: {e}")
+
+        # Close errlog sink if we opened one
+        if process_info.errlog_handle is not None:
+            try:
+                process_info.errlog_handle.close()
+            except Exception:
+                pass
 
         # Terminate process if we have one
         elif process_info.process is not None and process_info.is_alive:
@@ -334,7 +359,5 @@ def _atexit_shutdown():
         # Never block interpreter shutdown due to cleanup issues
         pass
 
-
-import atexit as _atexit_mod
 
 _atexit_mod.register(_atexit_shutdown)

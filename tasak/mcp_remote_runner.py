@@ -11,8 +11,9 @@ This module exposes a stable interface used by tests:
 import sys
 import json
 import subprocess
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from .schema_manager import SchemaManager
+from .mcp_parser import show_tool_help, show_simplified_app_help
 
 # Expose MCPRemoteClient at module scope to support test patching
 from .mcp_remote_client import MCPRemoteClient
@@ -49,7 +50,9 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
 
     # Check for special commands that don't need the client
     if "--help" in app_args or "-h" in app_args:
-        _print_help(app_name, app_config)
+        # Simplified grouped help with descriptions
+        tool_defs = _get_tool_defs_for_help(app_name, app_config)
+        show_simplified_app_help(app_name, tool_defs or [], app_type="mcp-remote")
         return
 
     if "--auth" in app_args:
@@ -66,53 +69,46 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
         _run_interactive_mode(server_url)
         return
 
-    # Mode: curated or dynamic (default dynamic)
-    meta = app_config.get("meta", {})
-    mode = meta.get("mode", "dynamic")
+    # Always resolve tool definitions for help/validation below (with 1-day TTL)
+    tool_defs = _get_tool_defs_for_help(app_name, app_config)
 
-    schema_manager = SchemaManager()
-    tool_defs = None
-
-    if mode == "curated":
-        # Try cached schema first
-        schema_data = schema_manager.load_schema(app_name)
-        if schema_data:
-            tool_defs = schema_manager.convert_to_tool_list(schema_data)
-            age_days = schema_manager.get_schema_age_days(app_name)
-            if age_days and age_days > 7:
-                print(
-                    f"Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
-                    file=sys.stderr,
-                )
-
-    if not tool_defs:
-        # Dynamic fetch via MCPRemoteClient (module-level symbol for test patching)
-        print("Fetching tool definitions for mcp-remote app...", file=sys.stderr)
-        try:
-            client = MCPRemoteClient(app_name, app_config)
-            tool_defs = client.get_tool_definitions()
-        except Exception:
-            tool_defs = None
-
-        # Cache in curated/dynamic modes where applicable
-        if tool_defs and mode in ("curated", "dynamic"):
-            schema_manager.save_schema(app_name, tool_defs)
-
-    # If no tool provided, show available tools
+    # If no tool provided, show minimal list of methods only
     if not app_args:
-        if not tool_defs:
-            print("Error: No tools available for '" + app_name + "'.", file=sys.stderr)
-            print("Authentication is required for remote servers.", file=sys.stderr)
-            print(f"Run: tasak admin auth {app_name}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Available tools for {app_name}:")
-        for t in tool_defs:
-            print(f"{t.get('name')}: {t.get('description', '')}")
+        for t in tool_defs or []:
+            name = t.get("name")
+            if name:
+                print(name)
         return
 
     # Parse tool invocation
     tool_name = app_args[0]
     args_tokens = app_args[1:]
+
+    # Check if tool exists and if required params are satisfied
+    tool_schema = next(
+        (t for t in (tool_defs or []) if t.get("name") == tool_name), None
+    )
+    if tool_schema is None:
+        print(f"Error: Unknown tool '{tool_name}'", file=sys.stderr)
+        sys.exit(1)
+    required = (tool_schema.get("input_schema", {}) or {}).get("required", []) or []
+    # Explicit tool help request
+    if "--help" in args_tokens or "-h" in args_tokens:
+        show_tool_help(app_name, [tool_schema], app_type="mcp-remote")
+        return
+    if not args_tokens and not required:
+        # Immediate call with no params
+        client = MCPRemoteClient(app_name, app_config)
+        try:
+            result = client.call_tool(tool_name, {})
+            if isinstance(result, (dict, list)):
+                print(json.dumps(result))
+            else:
+                print(result)
+        except Exception as e:
+            print(f"Error executing tool: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
 
     # Build argument dict and collect unexpected positionals
     parsed_args: Dict[str, Any] = {}
@@ -133,6 +129,12 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
             unexpected.append(tok)
             i += 1
 
+    # If required params are still missing after parsing, show focused help
+    missing = [r for r in required if r not in parsed_args]
+    if missing:
+        show_tool_help(app_name, [tool_schema], app_type="mcp-remote")
+        return
+
     if unexpected:
         print(
             f"Warning: Ignoring unexpected positional arguments: {unexpected}",
@@ -151,6 +153,37 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
     except Exception as e:
         print(f"Error executing tool: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def _get_tool_defs_for_help(
+    app_name: str, app_config: Dict[str, Any]
+) -> Optional[List[Dict[str, Any]]]:
+    """Return tool definitions, refreshing cache if older than 1 day.
+
+    - Prefer cached schema if age < 1 day
+    - Otherwise, fetch via MCPRemoteClient quietly; fallback to cache on failure
+    """
+    schema_manager = SchemaManager()
+    schema_data = schema_manager.load_schema(app_name)
+    if schema_data:
+        age_days = schema_manager.get_schema_age_days(app_name) or 0
+        if age_days < 1:
+            return schema_manager.convert_to_tool_list(schema_data)
+
+    # Cache is missing or stale (>= 1 day) — fetch quietly
+    try:
+        client = MCPRemoteClient(app_name, app_config)
+        tools = client.get_tool_definitions() or []
+        if tools:
+            schema_manager.save_schema(app_name, tools)
+            return tools
+    except Exception:
+        pass
+
+    # Fallback to whatever cache exists
+    if schema_data:
+        return schema_manager.convert_to_tool_list(schema_data)
+    return []
 
 
 def _clear_cache(app_name: str):
@@ -218,6 +251,7 @@ def _print_help(app_name: str, app_config: Dict[str, Any]):
     print()
     print("Note: OAuth authentication is required for remote servers.")
 
+    # Prefer tools listed in config meta only; detailed list is rendered separately
     tools = meta.get("tools")
     if tools:
         print("\nAvailable tools:")

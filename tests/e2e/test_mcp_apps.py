@@ -172,8 +172,15 @@ class TestMCPApps:
         result = self.run_tasak("test-mcp", "--help")
 
         if result and result.returncode == 0:
-            # Should show some help information
-            assert "tool" in result.stdout.lower() or "mcp" in result.stdout.lower()
+            # Simplified help: should list tool names
+            output = result.stdout.lower()
+            assert (
+                "add" in output
+                or "multiply" in output
+                or "echo" in output
+                or "get_weather" in output
+                or "divide" in output
+            )
 
 
 class TestMCPInteractive:

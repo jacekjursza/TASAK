@@ -11,7 +11,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client, StdioServerParameters
 
 from .mcp_real_client import MCPRealClient
-from .mcp_parser import parse_mcp_args, show_tool_help
+from .mcp_parser import parse_mcp_args, show_tool_help, show_simplified_app_help
 from .schema_manager import SchemaManager
 
 CACHE_EXPIRATION_SECONDS = 15 * 60  # 15 minutes
@@ -47,52 +47,78 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     meta = app_config.get("meta", {})
     mode = meta.get("mode", "dynamic")  # Default to dynamic for backward compatibility
 
-    # Get tool definitions (not needed for proxy mode)
+    # Get tool definitions with transparent 1-day refresh (not needed for proxy mode)
     tool_defs = None
     if mode != "proxy":
-        schema_manager = SchemaManager()
+        tool_defs = _get_tool_defs_for_list(app_name, app_config)
+        # If still none, keep behavior when user tries to call a tool; for plain listing, show nothing
 
-        if mode == "curated":
-            # Try to load from cached schema first
-            schema_data = schema_manager.load_schema(app_name)
-            if schema_data:
-                tool_defs = schema_manager.convert_to_tool_list(schema_data)
-                # Show age of schema if old
-                age_days = schema_manager.get_schema_age_days(app_name)
-                if age_days and age_days > 7:
-                    print(
-                        f"Note: Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
-                        file=sys.stderr,
-                    )
+    # Minimal listing (names only) when no arguments
+    if not app_args:
+        if tool_defs:
+            for t in tool_defs:
+                name = t.get("name")
+                if name:
+                    print(name)
+        return
 
-        # If no cached schema or dynamic mode, fetch from server
-        if not tool_defs:
-            from .daemon.client import get_mcp_client
+    # App-level simplified help
+    if len(app_args) == 1 and app_args[0] in ("--help", "-h"):
+        show_simplified_app_help(app_name, tool_defs or [], app_type="mcp")
+        return
 
-            client = get_mcp_client(app_name, app_config)
-            tool_defs = client.get_tool_definitions()
+    # Special-case: direct tool invocation with optional args
+    # If only tool name is provided and it has no required params, run it
+    if app_args and not app_args[0].startswith("-"):
+        candidate_tool = app_args[0]
+        tool_schema = next(
+            (t for t in (tool_defs or []) if t.get("name") == candidate_tool), None
+        )
+        if tool_schema:
+            required = (tool_schema.get("input_schema", {}) or {}).get(
+                "required", []
+            ) or []
+            args_tokens = app_args[1:]
+            # Build a simple presence map of provided flags
+            provided = set()
+            i = 0
+            while i < len(args_tokens):
+                tok = args_tokens[i]
+                if tok.startswith("--"):
+                    key = tok[2:]
+                    provided.add(key)
+                    # Skip value if present
+                    if i + 1 < len(args_tokens) and not args_tokens[i + 1].startswith(
+                        "--"
+                    ):
+                        i += 2
+                    else:
+                        i += 1
+                else:
+                    i += 1
 
-            # Cache the tools if we fetched them
-            if tool_defs and mode == "dynamic":
-                schema_manager.save_schema(app_name, tool_defs)
+            missing = [r for r in required if r not in provided]
+            if not args_tokens and not required:
+                # Call immediately with empty args
+                from .daemon.client import get_mcp_client
 
-        if not tool_defs and "--help" not in app_args:
-            print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
-            if mode == "curated" and schema_manager.schema_exists(app_name):
-                print("Schema file exists but couldn't be loaded.", file=sys.stderr)
-            else:
-                print("This could mean:", file=sys.stderr)
-                print("  - The server is not running", file=sys.stderr)
-                print("  - The server has no tools exposed", file=sys.stderr)
-                print("  - There's a configuration issue", file=sys.stderr)
-                if mode == "curated":
-                    print(
-                        f"  - No cached schema. Run 'tasak admin refresh {app_name}' first.",
-                        file=sys.stderr,
-                    )
-            sys.exit(1)
+                client = get_mcp_client(app_name, app_config)
+                try:
+                    result = client.call_tool(candidate_tool, {})
+                    if isinstance(result, (dict, list)):
+                        print(json.dumps(result, indent=2))
+                    else:
+                        print(result)
+                except Exception as e:
+                    print(f"Error executing tool: {e}", file=sys.stderr)
+                    sys.exit(1)
+                return
+            if missing:
+                # Show focused help for that single tool
+                show_tool_help(app_name, [tool_schema], app_type="mcp")
+                return
 
-    # Parse arguments using the unified parser
+    # Parse arguments using the unified parser for general cases
     tool_name, tool_args, parsed_args = parse_mcp_args(
         app_name, tool_defs or [], app_args, app_type="mcp", mode=mode
     )
@@ -122,6 +148,38 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         # This should rarely happen as MCPRealClient handles most errors
         print(f"Error executing tool: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def _get_tool_defs_for_list(
+    app_name: str, app_config: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Return tool definitions with a transparent 1-day refresh.
+
+    Prefers cached schema if age < 1 day; otherwise fetches via daemon client and saves.
+    """
+    schema_manager = SchemaManager()
+    schema_data = schema_manager.load_schema(app_name)
+    if schema_data:
+        age_days = schema_manager.get_schema_age_days(app_name) or 0
+        if age_days < 1:
+            return schema_manager.convert_to_tool_list(schema_data)
+
+    # Fetch via daemon client
+    try:
+        from .daemon.client import get_mcp_client
+
+        client = get_mcp_client(app_name, app_config)
+        tools = client.get_tool_definitions() or []
+        if tools:
+            schema_manager.save_schema(app_name, tools)
+            return tools
+    except Exception:
+        pass
+
+    # Fallback to whatever cache exists
+    if schema_data:
+        return schema_manager.convert_to_tool_list(schema_data)
+    return []
 
 
 async def run_interactive_session_async(app_name: str, mcp_config: Dict[str, Any]):

@@ -29,23 +29,45 @@ class TestRunMCPRemoteApp:
         captured = capsys.readouterr()
         assert "'server_url' not specified" in captured.err
 
-    @patch("tasak.mcp_remote_runner._print_help")
-    def test_help_flag(self, mock_print_help):
-        """Test --help flag."""
+    @patch("tasak.mcp_remote_runner.SchemaManager")
+    def test_help_flag(self, mock_schema_manager_class, capsys):
+        """Test --help flag prints grouped simplified help."""
         app_config = {"meta": {"server_url": "https://example.com"}}
+        mock_schema_manager = Mock()
+        mock_schema_manager.load_schema.return_value = {"tools": {"t1": {}, "t2": {}}}
+        mock_schema_manager.convert_to_tool_list.return_value = [
+            {"name": "t1", "description": "desc1", "input_schema": {"required": []}},
+            {"name": "t2", "description": "desc2", "input_schema": {"required": []}},
+        ]
+        mock_schema_manager.get_schema_age_days.return_value = 0
+        mock_schema_manager_class.return_value = mock_schema_manager
 
         run_mcp_remote_app("test_app", app_config, ["--help"])
 
-        mock_print_help.assert_called_once_with("test_app", app_config)
+        captured = capsys.readouterr()
+        out = captured.out.strip().splitlines()
+        assert '"test_app" commands:' in out[0]
+        assert any(line.startswith("t1 - desc1") for line in out)
+        assert any(line.startswith("t2 - desc2") for line in out)
 
-    @patch("tasak.mcp_remote_runner._print_help")
-    def test_help_short_flag(self, mock_print_help):
-        """Test -h flag."""
+    @patch("tasak.mcp_remote_runner.SchemaManager")
+    def test_help_short_flag(self, mock_schema_manager_class, capsys):
+        """Test -h flag prints grouped simplified help."""
         app_config = {"meta": {"server_url": "https://example.com"}}
+        mock_schema_manager = Mock()
+        mock_schema_manager.load_schema.return_value = {"tools": {"t1": {}}}
+        mock_schema_manager.convert_to_tool_list.return_value = [
+            {"name": "t1", "description": "desc", "input_schema": {"required": []}}
+        ]
+        mock_schema_manager.get_schema_age_days.return_value = 0
+        mock_schema_manager_class.return_value = mock_schema_manager
 
         run_mcp_remote_app("test_app", app_config, ["-h"])
 
-        mock_print_help.assert_called_once_with("test_app", app_config)
+        captured = capsys.readouterr()
+        out = captured.out.strip().splitlines()
+        assert '"test_app" commands:' in out[0]
+        assert any(line.startswith("t1 - desc") for line in out)
 
     @patch("tasak.mcp_remote_runner._run_auth_flow")
     def test_auth_flag(self, mock_auth_flow, capsys):
@@ -101,13 +123,12 @@ class TestRunMCPRemoteApp:
         mock_schema_manager.get_schema_age_days.return_value = 10
         mock_schema_manager_class.return_value = mock_schema_manager
 
-        # Test listing tools
+        # Test listing tools via help-style output
         run_mcp_remote_app("test_app", app_config, [])
 
         captured = capsys.readouterr()
-        assert "Schema is 10 days old" in captured.err
-        assert "Available tools for test_app" in captured.out
-        assert "tool1: Test tool" in captured.out
+        # Minimal listing: just tool names
+        assert captured.out.strip() == "tool1"
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_dynamic_mode_fetches_tools(self, mock_schema_manager_class, capsys):
@@ -134,8 +155,7 @@ class TestRunMCPRemoteApp:
         )
 
         captured = capsys.readouterr()
-        assert "Fetching tool definitions" in captured.err
-        assert "Available tools for test_app" in captured.out
+        assert captured.out.strip() == "tool1"
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_no_tools_available_error(self, mock_schema_manager_class, capsys):
@@ -154,14 +174,12 @@ class TestRunMCPRemoteApp:
         stub = StubClient()
 
         with patch("tasak.mcp_remote_runner.MCPRemoteClient", new=lambda *a, **k: stub):
-            with pytest.raises(SystemExit) as exc_info:
-                run_mcp_remote_app("test_app", app_config, [])
+            # Now help-style output is shown without exiting
+            run_mcp_remote_app("test_app", app_config, [])
 
-        assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "No tools available" in captured.err
-        assert "Authentication is required" in captured.err
-        assert "tasak admin auth test_app" in captured.err
+        # Minimal listing with no tools produces empty output
+        assert captured.out.strip() == ""
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_call_tool_with_arguments(self, mock_schema_manager_class, capsys):

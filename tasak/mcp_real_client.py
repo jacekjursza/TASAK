@@ -205,7 +205,18 @@ class MCPRealClient:
                     env=full_env,
                 )
 
-                async with stdio_client(server_params) as (read, write):
+                # Silence server stderr unless in debug/verbose mode
+                import os as _os
+                import sys as _sys
+
+                _verbose = (_os.environ.get("TASAK_DEBUG") == "1") or (
+                    _os.environ.get("TASAK_VERBOSE") == "1"
+                )
+                _err_sink = _sys.stderr if _verbose else open(_os.devnull, "w")
+                async with stdio_client(server_params, errlog=_err_sink) as (
+                    read,
+                    write,
+                ):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
 
@@ -297,7 +308,18 @@ class MCPRealClient:
                     env=full_env,
                 )
 
-                async with stdio_client(server_params) as (read, write):
+                # Silence server stderr unless in debug/verbose mode
+                import os as _os
+                import sys as _sys
+
+                _verbose = (_os.environ.get("TASAK_DEBUG") == "1") or (
+                    _os.environ.get("TASAK_VERBOSE") == "1"
+                )
+                _err_sink = _sys.stderr if _verbose else open(_os.devnull, "w")
+                async with stdio_client(server_params, errlog=_err_sink) as (
+                    read,
+                    write,
+                ):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
 

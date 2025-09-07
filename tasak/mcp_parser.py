@@ -267,3 +267,36 @@ def show_tool_help(
     print(f"  tasak {app_name} --clear-cache  # Clear cached schemas")
     if app_type == "mcp-remote":
         print(f"  tasak admin auth {app_name}     # Authenticate with server")
+
+
+def show_simplified_app_help(
+    app_name: str, tool_defs: List[Dict[str, Any]], app_type: str = "mcp"
+):
+    """
+    Print a simplified, agent-friendly help for an MCP application.
+
+    Groups tools into:
+    - commands: tools with no required parameters (can run immediately)
+    - sub-apps: tools with required parameters (need --help to read more)
+    """
+    commands: List[Dict[str, Any]] = []
+    subapps: List[Dict[str, Any]] = []
+
+    for tool in tool_defs or []:
+        schema = tool.get("input_schema", {}) or {}
+        required = schema.get("required", []) or []
+        (commands if len(required) == 0 else subapps).append(tool)
+
+    # Commands section
+    print(f'"{app_name}" commands:')
+    for t in commands:
+        name = t.get("name", "")
+        desc = t.get("description", "").strip()
+        print(f"{name} - {desc}")
+
+    # Sub-apps section
+    print('\n"{}" sub-apps (use --help to read more):'.format(app_name))
+    for t in subapps:
+        name = t.get("name", "")
+        desc = t.get("description", "").strip()
+        print(f"{name} - {desc}")

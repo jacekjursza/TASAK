@@ -273,6 +273,23 @@ def smart_refactor(file_pattern: str, old_name: str, new_name: str):
 - [Advanced Usage](docs/advanced_usage.md) - MCP servers, Python plugins, and workflows
 - [Changelog](CHANGELOG.md) - See all releases and changes
 
+## 🤖 CLI Semantics for Agents
+
+For MCP and MCP‑Remote apps, TASAK presents a predictable, agent‑friendly CLI:
+
+- `tasak <app>` → prints only tool names (one per line). No headers or descriptions.
+- `tasak <app> <tool>` →
+  - If the tool has no required parameters: executes immediately with empty args.
+  - If the tool has required parameters: shows focused help for that tool (same as `--help`), including description and parameters with required/type info.
+- `tasak <app> <tool> --help` → always shows focused help for that single tool.
+- `tasak <app> --help` → prints grouped simplified help:
+  - "<app> commands:" — tools without required params (can run immediately) as `<name> - <description>`
+  - "<app> sub-apps (use --help to read more):" — tools with required params as `<name> - <description>`
+
+Behavior notes:
+- Tool schema listing/help uses a transparent 1‑day cache; when stale or missing, TASAK refreshes quietly and updates the cache.
+- Noisy transport logs are suppressed by default; enable with `TASAK_DEBUG=1` or `TASAK_VERBOSE=1` if you need to debug.
+
 ## Daemon (Connection Pooling)
 
 TASAK can run a local daemon to pool MCP connections and cache schemas, dramatically reducing per-command startup time. The daemon runs on `127.0.0.1:8765` and the CLI auto-starts it on demand (unless explicitly stopped or disabled).

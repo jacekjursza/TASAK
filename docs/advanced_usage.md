@@ -96,6 +96,24 @@ atlassian:
 
 ### Usage
 
+#### Agent-Friendly CLI Semantics
+
+For both MCP and MCP‑Remote apps, the CLI follows a minimal, predictable contract suitable for AI agents:
+
+- `tasak <app>` → prints only tool names, one per line.
+- `tasak <app> <tool>` →
+  - Executes immediately if the tool has no required parameters.
+  - Otherwise prints focused help for that tool (equivalent to `--help`) with description and parameters, including which are required and their types.
+- `tasak <app> <tool> --help` → always prints focused help for that tool.
+- `tasak <app> --help` → prints grouped simplified help:
+  - "<app> commands:" — tools without required params (run immediately)
+  - "<app> sub-apps (use --help to read more):" — tools with required params
+  Each line shows `<name> - <description>`.
+
+Additional behavior:
+- Tool schemas are cached and refreshed automatically (transparent 1‑day TTL) during listing/help; no extra messages are shown to the agent.
+- Transport/debug logs are suppressed by default. Set `TASAK_DEBUG=1` or `TASAK_VERBOSE=1` to see detailed diagnostics.
+
 #### First-Time Authentication
 
 ```bash
