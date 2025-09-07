@@ -3,7 +3,6 @@
 import os
 import platform
 import stat
-import shutil
 import sys
 import yaml
 from pathlib import Path
@@ -39,20 +38,12 @@ def handle_create_command(args: argparse.Namespace, config: Dict[str, Any]):
         print("   Use --force to overwrite")
         sys.exit(1)
 
-    # Get the path to the tasak executable
-    tasak_path = shutil.which("tasak")
-    if not tasak_path:
-        # Fallback to sys.executable with -m tasak
-        tasak_cmd = f'"{sys.executable}" -m tasak'
-    else:
-        tasak_cmd = f'"{tasak_path}"'
-
     if is_windows:
         # For Windows, create both .py and .bat files
         py_path = command_path.with_suffix(".py")
         bat_path = command_path.with_suffix(".bat")
 
-        # Create Python script
+        # Create Python script (import-first with safe fallbacks)
         py_content = f'''"""
 Custom TASAK command: {command_name}
 This command uses {command_name}.yaml instead of tasak.yaml
@@ -61,22 +52,37 @@ This command uses {command_name}.yaml instead of tasak.yaml
 import os
 import sys
 import subprocess
+import shutil
 
-# Set environment variable to tell TASAK which config to use
+# Set environment variables to tell TASAK which config and display name to use
 os.environ["TASAK_CONFIG_NAME"] = "{command_name}.yaml"
+os.environ["TASAK_BIN_NAME"] = "{command_name}"
 
-# Run TASAK with all passed arguments
-cmd = [{tasak_cmd}] + sys.argv[1:]
-result = subprocess.run(" ".join(cmd), shell=True)
-sys.exit(result.returncode)
+def _run():
+    try:
+        from tasak.main import main as tasak_main
+        # Pretend the binary name is this wrapper
+        sys.argv[0] = "{command_name}"
+        tasak_main()
+        return 0
+    except Exception:
+        # Fallbacks: PATH binary first, then python -m tasak.main
+        bin_path = shutil.which("tasak")
+        if bin_path:
+            return subprocess.call([bin_path] + sys.argv[1:])
+        return subprocess.call([sys.executable, "-m", "tasak.main"] + sys.argv[1:])
+
+if __name__ == "__main__":
+    sys.exit(_run())
 '''
 
         with open(py_path, "w") as f:
             f.write(py_content)
 
-        # Create batch wrapper
+        # Create batch wrapper (.bat launches the Python wrapper)
         bat_content = f"""@echo off
 set TASAK_CONFIG_NAME={command_name}.yaml
+set TASAK_BIN_NAME={command_name}
 python "{py_path}" %*
 """
 
@@ -87,7 +93,7 @@ python "{py_path}" %*
         command_path = bat_path
 
     else:
-        # For Unix-like systems (Linux/Mac), create Python script with shebang
+        # For Unix-like systems (Linux/Mac), create Python script (import-first)
         wrapper_content = f'''#!/usr/bin/env python3
 """
 Custom TASAK command: {command_name}
@@ -97,14 +103,28 @@ This command uses {command_name}.yaml instead of tasak.yaml
 import os
 import sys
 import subprocess
+import shutil
 
-# Set environment variable to tell TASAK which config to use
+# Set environment variables to tell TASAK which config and display name to use
 os.environ["TASAK_CONFIG_NAME"] = "{command_name}.yaml"
+os.environ["TASAK_BIN_NAME"] = "{command_name}"
 
-# Run TASAK with all passed arguments
-cmd = [{tasak_cmd}] + sys.argv[1:]
-result = subprocess.run(" ".join(cmd), shell=True)
-sys.exit(result.returncode)
+def _run():
+    try:
+        from tasak.main import main as tasak_main
+        # Pretend the binary name is this wrapper
+        sys.argv[0] = "{command_name}"
+        tasak_main()
+        return 0
+    except Exception:
+        # Fallbacks: PATH binary first, then python -m tasak.main
+        bin_path = shutil.which("tasak")
+        if bin_path:
+            return subprocess.call([bin_path] + sys.argv[1:])
+        return subprocess.call([sys.executable, "-m", "tasak.main"] + sys.argv[1:])
+
+if __name__ == "__main__":
+    sys.exit(_run())
 '''
 
         # Write the wrapper script

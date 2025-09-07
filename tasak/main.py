@@ -1,6 +1,7 @@
 import argparse
 import atexit
 import sys
+import os
 from typing import Any, Dict
 
 from tasak.admin_commands import setup_admin_subparsers, handle_admin_command
@@ -54,16 +55,49 @@ def _cleanup_pool():
         pass
 
 
+def _get_binary_name() -> str:
+    """Resolve the display name for the CLI binary.
+
+    Order of precedence:
+    1) TASAK_BIN_NAME env var (set by wrappers)
+    2) basename(sys.argv[0]) if not a generic Python launcher
+    3) basename of TASAK_CONFIG_NAME without extension (if set)
+    4) 'tasak' fallback
+    """
+    # 1) explicit
+    env_bin = os.environ.get("TASAK_BIN_NAME")
+    if env_bin:
+        return env_bin
+
+    # 2) argv[0]
+    argv0 = os.path.basename(sys.argv[0] or "")
+    if argv0 and argv0 not in {"python", "python3", "py", "pytest", "-m"}:
+        return argv0
+
+    # 3) derive from TASAK_CONFIG_NAME
+    cfg = os.environ.get("TASAK_CONFIG_NAME", "").strip()
+    if cfg:
+        base = os.path.basename(cfg)
+        if base.lower().endswith((".yaml", ".yml")):
+            base = base.rsplit(".", 1)[0]
+        if base:
+            return base
+
+    # 4) fallback
+    return "tasak"
+
+
 def main():
     """Main entry point for the TASAK application."""
     # Register cleanup on exit
     atexit.register(_cleanup_pool)
 
     # Handle special commands that don't need config
+    binary = _get_binary_name()
     if len(sys.argv) > 1:
         # Handle --init command
         if sys.argv[1] == "--init" or sys.argv[1] == "-i":
-            parser = argparse.ArgumentParser(prog="tasak")
+            parser = argparse.ArgumentParser(prog=binary)
             parser.add_argument(
                 "--init",
                 "-i",
@@ -99,7 +133,7 @@ def main():
         from .daemon.manager import handle_daemon_command
 
         parser = argparse.ArgumentParser(
-            prog="tasak daemon", description="Manage TASAK background daemon"
+            prog=f"{binary} daemon", description="Manage TASAK background daemon"
         )
         subparsers = parser.add_subparsers(
             dest="daemon_command", help="Daemon command to execute"
@@ -146,7 +180,7 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "admin":
         # Handle admin commands with a dedicated parser
         parser = argparse.ArgumentParser(
-            prog="tasak admin", description="Administrative commands for TASAK"
+            prog=f"{binary} admin", description="Administrative commands for TASAK"
         )
         subparsers = parser.add_subparsers(
             dest="admin_command", help="Admin command to execute"
@@ -162,9 +196,9 @@ def main():
 
     # Regular app handling (backward compatible)
     parser = argparse.ArgumentParser(
-        prog="tasak",
+        prog=binary,
         description="TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents.",
-        epilog="Run 'tasak <app_name> --help' to see help for a specific application.",
+        epilog=f"Run '{binary} <app_name> --help' to see help for a specific application.",
         add_help=False,  # Disable default help to allow sub-app help handling
     )
 
@@ -200,7 +234,7 @@ def main():
     # Manual help handling
     if args.help and not args.app_name:
         parser.print_help()
-        print("\n💡 Quick start: Run 'tasak --init' to create a configuration")
+        print(f"\n💡 Quick start: Run '{binary} --init' to create a configuration")
         return
 
     # Augment with discovered python plugins (ladder-based) for regular app flow
@@ -233,7 +267,10 @@ def main():
             for name in similar:
                 print(f"  - {name}", file=sys.stderr)
         else:
-            print("  Run 'tasak' to see all available apps", file=sys.stderr)
+            print(
+                f"  Run '{_get_binary_name()}' to see all available apps",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     app_config = config.get(app_name)
@@ -304,8 +341,9 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
         }.get(app_type, "📋")
         print(f"  {type_icon} {app_name:<20} ({app_type}) - {app_description}")
 
-    print("\n💡 Usage: tasak <app_name> [arguments]")
-    print("   Help:  tasak <app_name> --help")
+    b = _get_binary_name()
+    print(f"\n💡 Usage: {b} <app_name> [arguments]")
+    print(f"   Help:  {b} <app_name> --help")
 
 
 if __name__ == "__main__":

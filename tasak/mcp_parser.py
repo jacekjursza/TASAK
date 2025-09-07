@@ -2,7 +2,42 @@
 
 import argparse
 import sys
+import os
+import shutil
+import textwrap
 from typing import Any, Dict, List, Tuple
+
+
+def _get_binary_name() -> str:
+    """Resolve the best display name for the current CLI binary.
+
+    Precedence:
+    1) TASAK_BIN_NAME (set by wrappers like `tasak admin create_command`)
+    2) sys.argv[0] basename, if not a generic Python launcher
+    3) TASAK_CONFIG_NAME (basename without extension), as a helpful hint
+    4) Fallback to 'tasak'
+    """
+    # 1) Explicit override
+    env_bin = os.environ.get("TASAK_BIN_NAME")
+    if env_bin:
+        return env_bin
+
+    # 2) argv[0] if it's not a generic Python entrypoint
+    argv0 = os.path.basename(sys.argv[0] or "")
+    if argv0 and argv0 not in {"python", "python3", "py", "pytest", "-m"}:
+        return argv0
+
+    # 3) Derive from TASAK_CONFIG_NAME if present (strip extension)
+    cfg = os.environ.get("TASAK_CONFIG_NAME", "").strip()
+    if cfg:
+        base = os.path.basename(cfg)
+        if base.lower().endswith((".yaml", ".yml")):
+            base = base.rsplit(".", 1)[0]
+        if base:
+            return base
+
+    # 4) Fallback
+    return "tasak"
 
 
 def build_mcp_parser(
@@ -141,7 +176,10 @@ def parse_mcp_args(
             print(f"\nAvailable tools for {app_name}:")
             for tool in tool_defs:
                 print(f"  {tool['name']}: {tool.get('description', 'No description')}")
-            print(f"\nUse 'tasak {app_name} <tool_name> --help' for tool-specific help")
+            binary = _get_binary_name()
+            print(
+                f"\nUse '{binary} {app_name} <tool_name> --help' for tool-specific help"
+            )
         raise
 
     # Handle special flags that don't require a tool
@@ -216,7 +254,7 @@ def show_tool_help(
         print("  - The server is not available")
         print("  - There's a configuration issue")
         if app_type == "mcp-remote":
-            print(f"\nTry: tasak admin auth {app_name}")
+            print(f"\nTry: {_get_binary_name()} admin auth {app_name}")
         return
 
     print(f"\nAvailable tools ({len(tool_defs)} total):\n")
@@ -251,22 +289,24 @@ def show_tool_help(
         print()  # Empty line between tools
 
     print("Usage examples:")
+    # Determine binary/program name dynamically with sensible fallback
+    binary = _get_binary_name()
     if tool_defs:
         first_tool = tool_defs[0]["name"]
-        print(f"  tasak {app_name} {first_tool} --help")
+        print(f"  {binary} {app_name} {first_tool} --help")
 
         # Show example with parameters if available
         schema = tool_defs[0].get("input_schema", {})
         properties = schema.get("properties", {})
         if properties:
             param_example = list(properties.keys())[0]
-            print(f"  tasak {app_name} {first_tool} --{param_example} <value>")
+            print(f"  {binary} {app_name} {first_tool} --{param_example} <value>")
 
     print("\nOther commands:")
-    print(f"  tasak {app_name} --interactive  # Interactive mode")
-    print(f"  tasak {app_name} --clear-cache  # Clear cached schemas")
+    print(f"  {binary} {app_name} --interactive  # Interactive mode")
+    print(f"  {binary} {app_name} --clear-cache  # Clear cached schemas")
     if app_type == "mcp-remote":
-        print(f"  tasak admin auth {app_name}     # Authenticate with server")
+        print(f"  {binary} admin auth {app_name}     # Authenticate with server")
 
 
 def show_simplified_app_help(
@@ -287,16 +327,42 @@ def show_simplified_app_help(
         required = schema.get("required", []) or []
         (commands if len(required) == 0 else subapps).append(tool)
 
+    # Determine terminal width for nice wrapping
+    term_width = shutil.get_terminal_size((100, 20)).columns
+    max_width = max(60, min(120, term_width))
+
+    def _print_wrapped_entry(name: str, desc: str):
+        header = f"{name} - "
+        wrapped = textwrap.fill(
+            desc.strip(),
+            width=max_width,
+            initial_indent=header,
+            subsequent_indent=" " * len(header),
+            replace_whitespace=True,
+        )
+        print(wrapped)
+
     # Commands section
     print(f'"{app_name}" commands:')
     for t in commands:
         name = t.get("name", "")
         desc = t.get("description", "").strip()
-        print(f"{name} - {desc}")
+        _print_wrapped_entry(name, desc)
 
-    # Sub-apps section
-    print('\n"{}" sub-apps (use --help to read more):'.format(app_name))
-    for t in subapps:
-        name = t.get("name", "")
-        desc = t.get("description", "").strip()
-        print(f"{name} - {desc}")
+    # Sub-apps section (names only, comma-separated)
+    print('\n"{}" sub-apps:'.format(app_name))
+    if subapps:
+        names = ", ".join(t.get("name", "") for t in subapps if t.get("name"))
+        wrapped_names = textwrap.fill(
+            names,
+            width=max_width,
+            initial_indent="  ",
+            subsequent_indent="  ",
+            replace_whitespace=True,
+        )
+        print(wrapped_names)
+        # Show a concise hint for detailed help (dynamic binary name)
+        binary = _get_binary_name()
+        print(f"\nUse: {binary} {app_name} <sub-app> --help  # Details for that tool")
+    else:
+        print("  (none)")
