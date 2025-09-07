@@ -8,3 +8,5 @@ psutil>=5.9.0
 daemoniker>=0.2.3
 pytest-timeout>=2.3.1
 pytest-asyncio>=0.23
+fastmcp>=0.2
+pytest-asyncio>=0.23

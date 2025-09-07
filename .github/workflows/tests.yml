@@ -27,4 +27,6 @@ jobs:
           pip install -e .
 
       - name: Run tests
+        env:
+          TASAK_DEBUG: "1"
         run: pytest -c pytest-ci.ini -q
