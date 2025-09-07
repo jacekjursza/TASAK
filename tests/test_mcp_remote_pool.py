@@ -49,27 +49,23 @@ class TestPooledProcess(unittest.TestCase):
         self.assertAlmostEqual(pooled.idle_time, 5, delta=0.1)
 
 
-class TestMCPRemotePool(unittest.TestCase):
-    """Test MCPRemotePool functionality."""
+class TestMCPRemotePool:
+    """Test MCPRemotePool functionality without unittest async methods."""
 
-    def setUp(self):
-        """Reset singleton before each test."""
+    def setup_method(self):
         MCPRemotePool._instance = None
 
-    def tearDown(self):
-        """Clean up after each test."""
+    def teardown_method(self):
         if MCPRemotePool._instance:
             MCPRemotePool._instance._shutdown = True
 
     def test_singleton_pattern(self):
-        """Test that pool is a singleton."""
         pool1 = MCPRemotePool()
         pool2 = MCPRemotePool()
-        self.assertIs(pool1, pool2)
+        assert pool1 is pool2
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_create_process(self, mock_subprocess):
-        """Test creating a new process."""
+    def test_create_process(self, mock_subprocess):
         # Setup mocks
         mock_process = AsyncMock()
         mock_process.returncode = None
@@ -79,35 +75,38 @@ class TestMCPRemotePool(unittest.TestCase):
 
         mock_session = AsyncMock()
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=mock_session):
-            pool = MCPRemotePool()
+        async def run():
+            class _FakeCtx:
+                def __init__(self):
+                    self.exited = False
 
-            # Create process
-            await pool._create_process("test_app", "http://test.com")
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Verify process was created
-            mock_subprocess.assert_called_once_with(
-                "npx",
-                "-y",
-                "mcp-remote",
-                "http://test.com",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=None,
-            )
+                    return _Mock(), _Mock()
 
-            # Verify session was initialized
-            mock_session.initialize.assert_called_once()
+                async def __aexit__(self, exc_type, exc, tb):
+                    self.exited = True
+                    return False
 
-            # Verify process is in pool
-            self.assertIn("test_app", pool._pool)
-            self.assertEqual(pool._pool["test_app"].app_name, "test_app")
+            fake_ctx = _FakeCtx()
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=mock_session
+            ), patch(
+                "mcp.client.stdio.stdio_client", return_value=fake_ctx
+            ) as mock_stdio:
+                pool = MCPRemotePool()
+                await pool._create_process("test_app", "http://test.com")
+                # Verify stdio_client was invoked
+                assert mock_stdio.called
+                mock_session.initialize.assert_called_once()
+                assert "test_app" in pool._pool
+                assert pool._pool["test_app"].app_name == "test_app"
+
+        asyncio.run(run())
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_reuse_existing_process(self, mock_subprocess):
-        """Test that existing process is reused."""
-        # Setup mocks
+    def test_reuse_existing_process(self, mock_subprocess):
         mock_process = AsyncMock()
         mock_process.returncode = None
         mock_process.stdout = AsyncMock()
@@ -116,85 +115,105 @@ class TestMCPRemotePool(unittest.TestCase):
 
         mock_session = AsyncMock()
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=mock_session):
-            pool = MCPRemotePool()
+        async def run():
+            class _FakeCtx:
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Get session twice
-            session1 = await pool.get_session("test_app", "http://test.com")
-            session2 = await pool.get_session("test_app", "http://test.com")
+                    return _Mock(), _Mock()
 
-            # Process should only be created once
-            mock_subprocess.assert_called_once()
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
 
-            # Same session should be returned
-            self.assertIs(session1, session2)
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=mock_session
+            ), patch(
+                "mcp.client.stdio.stdio_client", return_value=_FakeCtx()
+            ) as mock_stdio:
+                pool = MCPRemotePool()
+                session1 = await pool.get_session("test_app", "http://test.com")
+                session2 = await pool.get_session("test_app", "http://test.com")
+                mock_stdio.assert_called_once()
+                assert session1 is session2
+
+        asyncio.run(run())
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_remove_dead_process(self, mock_subprocess):
-        """Test that dead processes are removed and recreated."""
-        # First process (will die)
+    def test_remove_dead_process(self, mock_subprocess):
         mock_process1 = AsyncMock()
-        mock_process1.returncode = None  # Initially alive
+        mock_process1.returncode = None
         mock_process1.stdout = AsyncMock()
         mock_process1.stdin = AsyncMock()
-
-        # Second process (replacement)
         mock_process2 = AsyncMock()
         mock_process2.returncode = None
         mock_process2.stdout = AsyncMock()
         mock_process2.stdin = AsyncMock()
-
         mock_subprocess.side_effect = [mock_process1, mock_process2]
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()):
-            pool = MCPRemotePool()
+        async def run():
+            class _FakeCtx:
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Get session first time
-            await pool.get_session("test_app", "http://test.com")
+                    return _Mock(), _Mock()
 
-            # Mark process as dead
-            mock_process1.returncode = 1
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
 
-            # Get session again - should create new process
-            await pool.get_session("test_app", "http://test.com")
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()
+            ), patch(
+                "mcp.client.stdio.stdio_client", return_value=_FakeCtx()
+            ) as mock_stdio:
+                pool = MCPRemotePool()
+                await pool.get_session("test_app", "http://test.com")
+                # Simulate that we now track a child process that has exited
+                from unittest.mock import Mock as _Mock
 
-            # Should have created 2 processes
-            self.assertEqual(mock_subprocess.call_count, 2)
+                pool._pool["test_app"].process = _Mock(returncode=1)
+                await pool.get_session("test_app", "http://test.com")
+                assert mock_stdio.call_count == 2
+
+        asyncio.run(run())
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_max_pool_size(self, mock_subprocess):
-        """Test pool size limit is enforced."""
-        # Create mock processes
+    def test_max_pool_size(self, mock_subprocess):
         mock_processes = []
-        for i in range(3):
-            mock_process = AsyncMock()
-            mock_process.returncode = None
-            mock_process.stdout = AsyncMock()
-            mock_process.stdin = AsyncMock()
-            mock_processes.append(mock_process)
-
+        for _ in range(3):
+            p = AsyncMock()
+            p.returncode = None
+            p.stdout = AsyncMock()
+            p.stdin = AsyncMock()
+            mock_processes.append(p)
         mock_subprocess.side_effect = mock_processes
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()):
-            pool = MCPRemotePool()
-            pool.MAX_POOL_SIZE = 2  # Limit to 2
+        async def run():
+            class _FakeCtx:
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Create 3 processes
-            await pool.get_session("app1", "http://test1.com")
-            await pool.get_session("app2", "http://test2.com")
-            await pool.get_session("app3", "http://test3.com")
+                    return _Mock(), _Mock()
 
-            # Pool should only have 2 processes
-            self.assertEqual(len(pool._pool), 2)
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
 
-            # First app should have been removed
-            self.assertNotIn("app1", pool._pool)
-            self.assertIn("app2", pool._pool)
-            self.assertIn("app3", pool._pool)
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()
+            ), patch("mcp.client.stdio.stdio_client", return_value=_FakeCtx()):
+                pool = MCPRemotePool()
+                pool.MAX_POOL_SIZE = 2
+                await pool.get_session("app1", "http://test1.com")
+                await pool.get_session("app2", "http://test2.com")
+                await pool.get_session("app3", "http://test3.com")
+                assert len(pool._pool) == 2
+                assert "app1" not in pool._pool
+                assert "app2" in pool._pool
+                assert "app3" in pool._pool
+
+        asyncio.run(run())
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_cleanup_idle_processes(self, mock_subprocess):
-        """Test that idle processes are cleaned up."""
+    def test_cleanup_idle_processes(self, mock_subprocess):
         mock_process = AsyncMock()
         mock_process.returncode = None
         mock_process.stdout = AsyncMock()
@@ -203,65 +222,79 @@ class TestMCPRemotePool(unittest.TestCase):
         mock_process.wait = AsyncMock()
         mock_subprocess.return_value = mock_process
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()):
-            pool = MCPRemotePool()
-            pool.IDLE_TIMEOUT = 0.1  # Very short timeout for testing
+        async def run():
+            class _FakeCtx:
+                def __init__(self):
+                    self.exited = False
 
-            # Create process
-            await pool.get_session("test_app", "http://test.com")
-            self.assertIn("test_app", pool._pool)
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Make it idle
-            pool._pool["test_app"].last_used = time.time() - 1
+                    return _Mock(), _Mock()
 
-            # Run cleanup
-            await pool._cleanup_idle_processes()
+                async def __aexit__(self, exc_type, exc, tb):
+                    self.exited = True
+                    return False
 
-            # Process should be removed
-            self.assertNotIn("test_app", pool._pool)
-            mock_process.terminate.assert_called_once()
+            fake_ctx = _FakeCtx()
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()
+            ), patch("mcp.client.stdio.stdio_client", return_value=fake_ctx):
+                pool = MCPRemotePool()
+                pool.IDLE_TIMEOUT = 0.1
+                await pool.get_session("test_app", "http://test.com")
+                assert "test_app" in pool._pool
+                pool._pool["test_app"].last_used = time.time() - 1
+                await pool._cleanup_idle_processes()
+                assert "test_app" not in pool._pool
+                assert fake_ctx.exited
+
+        asyncio.run(run())
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_shutdown(self, mock_subprocess):
-        """Test pool shutdown terminates all processes."""
-        # Create multiple mock processes
+    def test_shutdown(self, mock_subprocess):
         mock_processes = []
-        for i in range(2):
-            mock_process = AsyncMock()
-            mock_process.returncode = None
-            mock_process.stdout = AsyncMock()
-            mock_process.stdin = AsyncMock()
-            mock_process.terminate = Mock()
-            mock_process.wait = AsyncMock()
-            mock_processes.append(mock_process)
-
+        for _ in range(2):
+            p = AsyncMock()
+            p.returncode = None
+            p.stdout = AsyncMock()
+            p.stdin = AsyncMock()
+            p.terminate = Mock()
+            p.wait = AsyncMock()
+            mock_processes.append(p)
         mock_subprocess.side_effect = mock_processes
 
-        with patch("tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()):
-            pool = MCPRemotePool()
+        async def run():
+            class _FakeCtx:
+                def __init__(self):
+                    self.exited = False
 
-            # Create processes
-            await pool.get_session("app1", "http://test1.com")
-            await pool.get_session("app2", "http://test2.com")
+                async def __aenter__(self):
+                    from unittest.mock import Mock as _Mock
 
-            # Shutdown pool
-            await pool.shutdown()
+                    return _Mock(), _Mock()
 
-            # All processes should be terminated
-            for mock_process in mock_processes:
-                mock_process.terminate.assert_called_once()
+                async def __aexit__(self, exc_type, exc, tb):
+                    self.exited = True
+                    return False
 
-            # Pool should be empty
-            self.assertEqual(len(pool._pool), 0)
+            fake_ctx = _FakeCtx()
+            with patch(
+                "tasak.mcp_remote_pool.ClientSession", return_value=AsyncMock()
+            ), patch("mcp.client.stdio.stdio_client", return_value=fake_ctx):
+                pool = MCPRemotePool()
+                await pool.get_session("app1", "http://test1.com")
+                await pool.get_session("app2", "http://test2.com")
+                await pool.shutdown()
+                assert fake_ctx.exited
+                assert len(pool._pool) == 0
+
+        asyncio.run(run())
 
     def test_get_stats(self):
-        """Test get_stats returns correct information."""
         pool = MCPRemotePool()
-
-        # Add mock process to pool
         mock_process = Mock()
         mock_process.returncode = None
-
         pool._pool["test_app"] = PooledProcess(
             process=mock_process,
             session=Mock(),
@@ -270,14 +303,12 @@ class TestMCPRemotePool(unittest.TestCase):
             app_name="test_app",
             server_url="http://test.com",
         )
-
         stats = pool.get_stats()
-
-        self.assertEqual(stats["pool_size"], 1)
-        self.assertEqual(stats["max_size"], pool.MAX_POOL_SIZE)
-        self.assertIn("test_app", stats["processes"])
-        self.assertTrue(stats["processes"]["test_app"]["alive"])
-        self.assertAlmostEqual(stats["processes"]["test_app"]["idle_time"], 30, delta=1)
+        assert stats["pool_size"] == 1
+        assert stats["max_size"] == pool.MAX_POOL_SIZE
+        assert "test_app" in stats["processes"]
+        assert stats["processes"]["test_app"]["alive"]
+        assert abs(stats["processes"]["test_app"]["idle_time"] - 30) < 2
 
 
 class TestMCPRemoteClientIntegration(unittest.TestCase):

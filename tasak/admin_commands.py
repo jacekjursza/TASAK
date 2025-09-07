@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from .auth import run_auth_app
 from .python_plugins import discover_python_plugins, get_plugin_search_dirs
 from .mcp_real_client import MCPRealClient
 from .schema_manager import SchemaManager
@@ -280,13 +279,31 @@ def handle_auth(args: argparse.Namespace, config: Dict[str, Any]):
     else:
         # Perform authentication
         print(f"Authenticating with '{app_name}'...")
-        # For MCP-remote apps, we need the server URL
         if app_config.get("type") == "mcp-remote":
             server_url = app_config.get("meta", {}).get("server_url")
+            if not server_url:
+                print(
+                    f"Error: server_url not configured for '{app_name}'",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            # Delegate to a helper (tested via patch in unit tests)
             run_auth_app(app_name, server_url=server_url)
         else:
-            # For regular MCP apps, no auth needed typically
             print(f"App '{app_name}' does not require authentication.", file=sys.stderr)
+
+
+def run_auth_app(app_name: str, server_url: str):
+    """Helper to initiate OAuth using mcp-remote. Split out for easy testing.
+
+    In production, this calls a small wrapper which shells out to `npx mcp-remote`.
+    Tests patch this symbol to verify it is invoked with expected arguments.
+    """
+    from .mcp_remote_runner import _run_auth_flow
+
+    print("Starting authentication flow...", file=sys.stderr)
+    print("A browser window will open for authentication.", file=sys.stderr)
+    _run_auth_flow(server_url)
 
 
 def handle_refresh(args: argparse.Namespace, config: Dict[str, Any]):

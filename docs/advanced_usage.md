@@ -21,6 +21,7 @@
   - [Authentication Management](#authentication-management)
   - [Schema Management](#schema-management)
   - [Information Commands](#information-commands)
+  - [Custom Commands (create_command)](#custom-commands-create_command)
 - [Performance Optimizations](#performance-optimizations)
   - [Process Pool (MCP-Remote)](#process-pool-mcp-remote)
   - [Schema Caching](#schema-caching)
@@ -95,6 +96,24 @@ atlassian:
 | Slack | `https://mcp.slack.com/v1/sse` | Workspace communication |
 
 ### Usage
+
+#### Agent-Friendly CLI Semantics
+
+For both MCP and MCP‑Remote apps, the CLI follows a minimal, predictable contract suitable for AI agents:
+
+- `tasak <app>` → prints only tool names, one per line.
+- `tasak <app> <tool>` →
+  - Executes immediately if the tool has no required parameters.
+  - Otherwise prints focused help for that tool (equivalent to `--help`) with description and parameters, including which are required and their types.
+- `tasak <app> <tool> --help` → always prints focused help for that tool.
+- `tasak <app> --help` → prints grouped simplified help:
+  - "<app> commands:" — tools without required params (run immediately)
+  - "<app> sub-apps (use --help to read more):" — tools with required params
+  Each line shows `<name> - <description>`.
+
+Additional behavior:
+- Tool schemas are cached and refreshed automatically (transparent 1‑day TTL) during listing/help; no extra messages are shown to the agent.
+- Transport/debug logs are suppressed by default. Set `TASAK_DEBUG=1` or `TASAK_VERBOSE=1` to see detailed diagnostics.
 
 #### First-Time Authentication
 
@@ -291,6 +310,42 @@ tasak admin list --verbose
 # Show app details
 tasak admin info [app_name]
 ```
+
+### Custom Commands (create_command)
+
+Create a standalone command that uses its own YAML config (instead of `tasak.yaml`).
+
+Usage:
+
+```bash
+# Create wrapper in current directory
+tasak admin create_command mytool
+
+# Install wrapper globally (~/.local/bin/mytool)
+tasak admin create_command mytool --global
+
+# Overwrite existing wrapper
+tasak admin create_command mytool --force
+```
+
+What it does:
+- Generates a small Python wrapper (and `.bat` on Windows) named `<name>`.
+- Wrapper sets:
+  - `TASAK_CONFIG_NAME=<name>.yaml` (selects config family by name)
+  - `TASAK_BIN_NAME=<name>` (so help shows the right binary name)
+- Wrapper runs TASAK by importing `tasak.main` in‑process; fallbacks:
+  1) `tasak` from `PATH`
+  2) `python -m tasak.main`
+
+Config resolution for `<name>`:
+- Global: `~/.tasak/<name>.yaml`
+- Local: `./<name>.yaml` and `./.tasak/<name>.yaml` (merged from repo root to CWD)
+
+Tips:
+- To run a local wrapper in the current directory: `./mytool` (the current dir is not in `PATH`).
+- For global usage, ensure `~/.local/bin` is in your `PATH`:
+  - `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
+- One‑file override (no merging): set `TASAK_CONFIG=/full/path/to/file.yaml` and run `tasak ...`.
 
 ## Performance Optimizations
 

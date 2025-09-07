@@ -60,7 +60,7 @@ setup_env() {
 
     # Install development dependencies
     print_color "Installing dependencies..." "$YELLOW"
-    pip install -e ".[mcp]"
+    pip install -e "."
     pip install pytest pytest-cov pytest-watch pre-commit ruff ipython
 
     # Install pre-commit hooks
@@ -133,7 +133,7 @@ clean_artifacts() {
 # Install in editable mode
 install_editable() {
     print_color "📦 Installing TASAK in editable mode..." "$BLUE"
-    pip install -e ".[mcp]"
+    pip install -e "."
     print_color "✅ TASAK installed!" "$GREEN"
 }
 

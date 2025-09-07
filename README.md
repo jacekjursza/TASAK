@@ -273,6 +273,68 @@ def smart_refactor(file_pattern: str, old_name: str, new_name: str):
 - [Advanced Usage](docs/advanced_usage.md) - MCP servers, Python plugins, and workflows
 - [Changelog](CHANGELOG.md) - See all releases and changes
 
+## 🤖 CLI Semantics for Agents
+
+For MCP and MCP‑Remote apps, TASAK presents a predictable, agent‑friendly CLI:
+
+- `tasak <app>` → prints only tool names (one per line). No headers or descriptions.
+- `tasak <app> <tool>` →
+  - If the tool has no required parameters: executes immediately with empty args.
+  - If the tool has required parameters: shows focused help for that tool (same as `--help`), including description and parameters with required/type info.
+- `tasak <app> <tool> --help` → always shows focused help for that single tool.
+- `tasak <app> --help` → prints grouped simplified help:
+  - "<app> commands:" — tools without required params (can run immediately) as `<name> - <description>`
+  - "<app> sub-apps (use --help to read more):" — tools with required params as `<name> - <description>`
+
+Behavior notes:
+- Tool schema listing/help uses a transparent 1‑day cache; when stale or missing, TASAK refreshes quietly and updates the cache.
+- Noisy transport logs are suppressed by default; enable with `TASAK_DEBUG=1` or `TASAK_VERBOSE=1` if you need to debug.
+
+## Daemon (Connection Pooling)
+
+TASAK can run a local daemon to pool MCP connections and cache schemas, dramatically reducing per-command startup time. The daemon runs on `127.0.0.1:8765` and the CLI auto-starts it on demand (unless explicitly stopped or disabled).
+
+- Start: `tasak daemon start`
+- Stop: `tasak daemon stop` (also disables autostart until next manual start)
+- Restart: `tasak daemon restart`
+- Status: `tasak daemon status`
+- Logs: `tasak daemon logs -f`
+
+### Logging levels
+
+By default the daemon is quiet (warning and errors only). Enable verbose logs when debugging:
+
+- CLI flags:
+  - `tasak daemon start -v` or `tasak daemon restart -v` (equivalent to debug)
+  - `tasak daemon start --log-level info` (or `debug`, `warning`, `error`)
+- Environment variable:
+  - `TASAK_DAEMON_LOG_LEVEL=INFO` (or `DEBUG`) before starting the daemon
+
+CLI-side daemon hints ("Using daemon…", "Daemon: …") appear only when `--debug` or `TASAK_VERBOSE=1` is set.
+
+### HTTP endpoints
+
+The daemon exposes a small local API for health checks and diagnostics:
+
+- `GET /health` – basic liveness + uptime
+- `GET /connections` – active connections with age/idle and counters
+- `GET /apps/{app}/ping?deep=true` – shallow or deep ping (deep performs a quick tool list)
+- `GET /metrics` – basic counters (connection creations/reuses, per-app list/call/error counts)
+
+### Autostart behavior
+
+The CLI auto-starts the daemon unless one of the following is true:
+- `tasak daemon stop` was called (creates `~/.tasak/daemon.disabled`)
+- `TASAK_NO_DAEMON=1` is set in the environment
+- `--debug` is used (bypasses daemon for direct connections)
+
+### Tuning
+
+You can tune TTLs via environment variables before starting the daemon:
+
+- `TASAK_DAEMON_CONN_TTL` – connection idle TTL in seconds (default: `300`)
+- `TASAK_DAEMON_CACHE_TTL` – tools cache TTL in seconds (default: `900`)
+
 ## 🤝 Community & Support
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/jacekjursza/TASAK/issues)
@@ -289,8 +351,16 @@ git clone https://github.com/jacekjursza/TASAK.git
 cd TASAK
 python -m venv .venv
 source .venv/bin/activate
+
+# Install in editable mode (includes MCP by default)
 pip install -e .
-pytest -q  # Run tests
+
+# Run tests
+pytest -q
+
+# Optional: if you install pytest-timeout, you can enable
+# suite timeouts using the provided CI config
+pytest -c pytest-ci.ini -q
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

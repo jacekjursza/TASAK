@@ -1,6 +1,7 @@
 import argparse
 import atexit
 import sys
+import os
 from typing import Any, Dict
 
 from tasak.admin_commands import setup_admin_subparsers, handle_admin_command
@@ -14,15 +15,76 @@ from tasak.init_command import handle_init_command
 
 
 def _cleanup_pool():
-    """Clean up the MCP Remote process pool on exit."""
+    """Best-effort cleanup of MCPRemotePool without creating it at exit.
+
+    Avoids instantiating the pool during interpreter shutdown and avoids
+    blocking the process with a long await. Mirrors the pool's internal
+    atexit logic with bounded waits.
+    """
     try:
         from tasak.mcp_remote_pool import MCPRemotePool
-        import asyncio
+        import logging
+        import concurrent.futures as _f
 
-        pool = MCPRemotePool()
-        asyncio.run(pool.shutdown())
+        # Suppress noisy asyncio generator-close logs during shutdown
+        try:
+            logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+        except Exception:
+            pass
+
+        inst = getattr(MCPRemotePool, "_instance", None)
+        if not inst or getattr(inst, "_shutdown", False):
+            return
+
+        # Submit shutdown to the pool's own loop and wait briefly.
+        try:
+            fut: _f.Future = inst._submit(inst.shutdown())  # type: ignore[attr-defined]
+            fut.result(timeout=2.0)
+        except Exception:
+            # As a fallback, try to stop the loop and join the thread briefly.
+            try:
+                inst._loop.call_soon_threadsafe(inst._loop.stop)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                inst._thread.join(timeout=0.5)  # type: ignore[attr-defined]
+            except Exception:
+                pass
     except Exception:
-        pass  # Ignore errors during cleanup
+        # Never raise during interpreter shutdown
+        pass
+
+
+def _get_binary_name() -> str:
+    """Resolve the display name for the CLI binary.
+
+    Order of precedence:
+    1) TASAK_BIN_NAME env var (set by wrappers)
+    2) basename(sys.argv[0]) if not a generic Python launcher
+    3) basename of TASAK_CONFIG_NAME without extension (if set)
+    4) 'tasak' fallback
+    """
+    # 1) explicit
+    env_bin = os.environ.get("TASAK_BIN_NAME")
+    if env_bin:
+        return env_bin
+
+    # 2) argv[0]
+    argv0 = os.path.basename(sys.argv[0] or "")
+    if argv0 and argv0 not in {"python", "python3", "py", "pytest", "-m"}:
+        return argv0
+
+    # 3) derive from TASAK_CONFIG_NAME
+    cfg = os.environ.get("TASAK_CONFIG_NAME", "").strip()
+    if cfg:
+        base = os.path.basename(cfg)
+        if base.lower().endswith((".yaml", ".yml")):
+            base = base.rsplit(".", 1)[0]
+        if base:
+            return base
+
+    # 4) fallback
+    return "tasak"
 
 
 def main():
@@ -31,10 +93,11 @@ def main():
     atexit.register(_cleanup_pool)
 
     # Handle special commands that don't need config
+    binary = _get_binary_name()
     if len(sys.argv) > 1:
         # Handle --init command
         if sys.argv[1] == "--init" or sys.argv[1] == "-i":
-            parser = argparse.ArgumentParser(prog="tasak")
+            parser = argparse.ArgumentParser(prog=binary)
             parser.add_argument(
                 "--init",
                 "-i",
@@ -64,11 +127,60 @@ def main():
 
     config = load_and_merge_configs()
 
+    # Check if first argument is 'daemon'
+    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
+        # Handle daemon commands
+        from .daemon.manager import handle_daemon_command
+
+        parser = argparse.ArgumentParser(
+            prog=f"{binary} daemon", description="Manage TASAK background daemon"
+        )
+        subparsers = parser.add_subparsers(
+            dest="daemon_command", help="Daemon command to execute"
+        )
+
+        # Add daemon subcommands
+        start_parser = subparsers.add_parser("start", help="Start the daemon")
+        start_parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Verbose logging (debug)"
+        )
+        start_parser.add_argument(
+            "--log-level",
+            choices=["debug", "info", "warning", "error"],
+            help="Set daemon log level",
+        )
+
+        subparsers.add_parser("stop", help="Stop the daemon")
+
+        restart_parser = subparsers.add_parser("restart", help="Restart the daemon")
+        restart_parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Verbose logging (debug)"
+        )
+        restart_parser.add_argument(
+            "--log-level",
+            choices=["debug", "info", "warning", "error"],
+            help="Set daemon log level",
+        )
+        subparsers.add_parser("status", help="Show daemon status")
+
+        logs_parser = subparsers.add_parser("logs", help="Show daemon logs")
+        logs_parser.add_argument(
+            "-n", "--lines", type=int, default=50, help="Number of lines to show"
+        )
+        logs_parser.add_argument(
+            "-f", "--follow", action="store_true", help="Follow log output"
+        )
+
+        # Parse and handle (skip 'daemon' from argv)
+        args = parser.parse_args(sys.argv[2:])
+        handle_daemon_command(args)
+        return
+
     # Check if first argument is 'admin'
     if len(sys.argv) > 1 and sys.argv[1] == "admin":
         # Handle admin commands with a dedicated parser
         parser = argparse.ArgumentParser(
-            prog="tasak admin", description="Administrative commands for TASAK"
+            prog=f"{binary} admin", description="Administrative commands for TASAK"
         )
         subparsers = parser.add_subparsers(
             dest="admin_command", help="Admin command to execute"
@@ -84,9 +196,9 @@ def main():
 
     # Regular app handling (backward compatible)
     parser = argparse.ArgumentParser(
-        prog="tasak",
+        prog=binary,
         description="TASAK: The Agent's Swiss Army Knife. A command-line proxy for AI agents.",
-        epilog="Run 'tasak <app_name> --help' to see help for a specific application.",
+        epilog=f"Run '{binary} <app_name> --help' to see help for a specific application.",
         add_help=False,  # Disable default help to allow sub-app help handling
     )
 
@@ -103,13 +215,26 @@ def main():
     parser.add_argument(
         "--list-apps", "-l", action="store_true", help="List available applications"
     )
+    # Add --debug flag for testing
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Debug mode: bypass daemon, show detailed logs and timing",
+    )
 
     args, unknown_args = parser.parse_known_args()
+
+    # Set debug mode globally
+    if args.debug:
+        import os
+
+        os.environ["TASAK_DEBUG"] = "1"
+        print("🔍 Debug mode enabled", file=sys.stderr)
 
     # Manual help handling
     if args.help and not args.app_name:
         parser.print_help()
-        print("\n💡 Quick start: Run 'tasak --init' to create a configuration")
+        print(f"\n💡 Quick start: Run '{binary} --init' to create a configuration")
         return
 
     # Augment with discovered python plugins (ladder-based) for regular app flow
@@ -129,6 +254,11 @@ def main():
     enabled_apps = apps_config.get("enabled_apps", [])
 
     if app_name not in enabled_apps:
+        # If user requested help for a non-enabled/unknown app, show top-level help gracefully
+        if args.help:
+            parser.print_help()
+            print(f"\n💡 Quick start: Run '{binary} --init' to create a configuration")
+            return
         print(
             f"❌ Error: App '{app_name}' is not enabled or does not exist.",
             file=sys.stderr,
@@ -142,7 +272,10 @@ def main():
             for name in similar:
                 print(f"  - {name}", file=sys.stderr)
         else:
-            print("  Run 'tasak' to see all available apps", file=sys.stderr)
+            print(
+                f"  Run '{_get_binary_name()}' to see all available apps",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     app_config = config.get(app_name)
@@ -185,7 +318,12 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
     print("🚀 TASAK - The Agent's Swiss Army Knife")
     print("=" * 50)
 
+    # Always show the section header so helpers can rely on it
+    print("\n📦 Available applications:")
+
     if not enabled_apps:
+        # No apps configured: show friendly guidance and an example
+        print("  (none)")
         print("\n📭 No applications configured yet!")
         print("\n💡 Get started:")
         print("  1. Run 'tasak --init' to create a configuration")
@@ -197,9 +335,10 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
         print("    type: cmd")
         print("    meta:")
         print("      command: 'echo Hello World'")
+        # Helpful hint that also surfaces common real apps
+        print("\n🔐 Tip: For cloud servers, authenticate first:")
+        print("   tasak admin auth atlassian")
         return
-
-    print("\n📦 Available applications:")
     for app_name in sorted(enabled_apps):
         app_info = config.get(app_name, {})
         app_type = app_info.get("type", "N/A")
@@ -213,8 +352,9 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
         }.get(app_type, "📋")
         print(f"  {type_icon} {app_name:<20} ({app_type}) - {app_description}")
 
-    print("\n💡 Usage: tasak <app_name> [arguments]")
-    print("   Help:  tasak <app_name> --help")
+    b = _get_binary_name()
+    print(f"\n💡 Usage: {b} <app_name> [arguments]")
+    print(f"   Help:  {b} <app_name> --help")
 
 
 if __name__ == "__main__":

@@ -21,22 +21,38 @@ authorization_code = None
 code_verifier = None  # For PKCE
 
 
+def _is_verbose() -> bool:
+    """Return True when verbose/debug output should be printed.
+
+    Controlled by TASAK_DEBUG=1 or TASAK_VERBOSE=1 environment variables.
+    """
+    return (
+        os.environ.get("TASAK_DEBUG") == "1" or os.environ.get("TASAK_VERBOSE") == "1"
+    )
+
+
 class OAuthCallbackHandler(http.server.SimpleHTTPRequestHandler):
     """HTTP handler to capture the OAuth 2.1 authorization code."""
 
     def do_GET(self):
         global authorization_code
 
-        # Log the full request for debugging
-        print(
-            f"DEBUG: Received callback request: {self.path[:100]}...", file=sys.stderr
-        )
+        # Log the full request only in verbose mode
+        if _is_verbose():
+            print(
+                f"DEBUG: Received callback request: {self.path[:100]}...",
+                file=sys.stderr,
+            )
 
         query_components = parse_qs(urlparse(self.path).query)
         if "code" in query_components:
             # Get the raw code first
             raw_code = query_components["code"][0]
-            print(f"DEBUG: Raw authorization code: {raw_code[:50]}...", file=sys.stderr)
+            if _is_verbose():
+                print(
+                    f"DEBUG: Raw authorization code: {raw_code[:50]}...",
+                    file=sys.stderr,
+                )
 
             # Decode the authorization code (it might be URL-encoded multiple times)
             code = raw_code
@@ -47,16 +63,18 @@ class OAuthCallbackHandler(http.server.SimpleHTTPRequestHandler):
                     break
                 code = decoded
                 decode_count += 1
-                print(
-                    f"DEBUG: After decode #{decode_count}: {code[:50]}...",
-                    file=sys.stderr,
-                )
+                if _is_verbose():
+                    print(
+                        f"DEBUG: After decode #{decode_count}: {code[:50]}...",
+                        file=sys.stderr,
+                    )
 
             authorization_code = code
-            print(
-                f"DEBUG: Final authorization code format: {code[:50]}...",
-                file=sys.stderr,
-            )
+            if _is_verbose():
+                print(
+                    f"DEBUG: Final authorization code format: {code[:50]}...",
+                    file=sys.stderr,
+                )
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
@@ -275,9 +293,10 @@ def _exchange_code_for_token(
     code: str, redirect_uri: str, token_url: str, client_id: str, verifier: str = None
 ):
     """Exchanges the authorization code for an access token and refresh token."""
-    print(f"DEBUG: Exchanging code (first 30 chars): {code[:30]}...")
-    print(f"DEBUG: Token URL: {token_url}")
-    print(f"DEBUG: Client ID: {client_id}")
+    if _is_verbose():
+        print(f"DEBUG: Exchanging code (first 30 chars): {code[:30]}...")
+        print(f"DEBUG: Token URL: {token_url}")
+        print(f"DEBUG: Client ID: {client_id}")
 
     payload = {
         "grant_type": "authorization_code",
@@ -289,14 +308,16 @@ def _exchange_code_for_token(
     # Add PKCE verifier if available
     if verifier:
         payload["code_verifier"] = verifier
-        print("DEBUG: Including PKCE code_verifier")
+        if _is_verbose():
+            print("DEBUG: Including PKCE code_verifier")
 
-    print("DEBUG: Full payload being sent:")
-    for key, value in payload.items():
-        if key == "code_verifier":
-            print(f"  {key}: {value[:20]}... (truncated)")
-        else:
-            print(f"  {key}: {value}")
+    if _is_verbose():
+        print("DEBUG: Full payload being sent:")
+        for key, value in payload.items():
+            if key == "code_verifier":
+                print(f"  {key}: {value[:20]}... (truncated)")
+            else:
+                print(f"  {key}: {value}")
 
     # MCP servers might require specific headers
     headers = {
@@ -311,7 +332,8 @@ def _exchange_code_for_token(
 
     encoded_payload = urllib.parse.urlencode(payload)
 
-    print(f"DEBUG: Encoded payload: {encoded_payload[:100]}...")
+    if _is_verbose():
+        print(f"DEBUG: Encoded payload: {encoded_payload[:100]}...")
 
     response = requests.post(token_url, data=encoded_payload, headers=headers)
 
@@ -325,9 +347,10 @@ def _exchange_code_for_token(
             parts = code.split(":")
             if len(parts) > 1:
                 alternate_code = parts[-1]
-                print(
-                    f"DEBUG: Trying with just the token part: {alternate_code[:20]}..."
-                )
+                if _is_verbose():
+                    print(
+                        f"DEBUG: Trying with just the token part: {alternate_code[:20]}..."
+                    )
                 payload["code"] = alternate_code
                 response = requests.post(token_url, data=payload, headers=headers)
 

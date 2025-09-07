@@ -56,9 +56,8 @@ def load_and_merge_configs() -> dict:
         if config_path.exists():
             with open(config_path, "r") as f:
                 return yaml.safe_load(f) or {}
-        else:
-            # In case the env var points to a non-existent file
-            return {}
+        # If the env var points to a non-existent file, fall back to standard search
+        # instead of returning an empty config (more resilient in CI environments).
 
     # If no env var, proceed with the original logic
     merged_config = {}

@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import subprocess
 import time
 from pathlib import Path
@@ -55,8 +56,20 @@ class TestMCPApps:
         """Helper to run tasak with test config."""
         test_env = os.environ.copy()
         test_env["TASAK_CONFIG"] = str(CONFIG_FILE)
+        # Bypass daemon for deterministic local stdio server in tests
+        test_env["TASAK_DEBUG"] = "1"
+        # Ensure subprocesses resolve 'python' to project venv first
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_bin = repo_root / ".venv" / "bin"
+        if venv_bin.exists():
+            test_env["PATH"] = f"{venv_bin}:{test_env.get('PATH','')}"
 
-        cmd = ["tasak"] + list(args)
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_python = repo_root / ".venv" / "bin" / "python"
+        python_exe = os.environ.get("PYTEST_TASAK_PY") or (
+            str(venv_python) if venv_python.exists() else sys.executable
+        )
+        cmd = [python_exe, "-m", "tasak.main"] + list(args)
 
         try:
             result = subprocess.run(
@@ -159,8 +172,15 @@ class TestMCPApps:
         result = self.run_tasak("test-mcp", "--help")
 
         if result and result.returncode == 0:
-            # Should show some help information
-            assert "tool" in result.stdout.lower() or "mcp" in result.stdout.lower()
+            # Simplified help: should list tool names
+            output = result.stdout.lower()
+            assert (
+                "add" in output
+                or "multiply" in output
+                or "echo" in output
+                or "get_weather" in output
+                or "divide" in output
+            )
 
 
 class TestMCPInteractive:
@@ -204,6 +224,11 @@ class TestMCPInteractive:
         """Test that MCP can run in interactive mode."""
         test_env = os.environ.copy()
         test_env["TASAK_CONFIG"] = str(CONFIG_FILE)
+        test_env["TASAK_DEBUG"] = "1"
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_bin = repo_root / ".venv" / "bin"
+        if venv_bin.exists():
+            test_env["PATH"] = f"{venv_bin}:{test_env.get('PATH','')}"
 
         cmd = ["python", "-m", "tasak.main", "test-mcp", "--interactive"]
 
@@ -288,7 +313,12 @@ class TestIntegration:
         test_env = os.environ.copy()
         test_env["TASAK_CONFIG"] = str(CONFIG_FILE)
 
-        cmd = ["tasak"] + list(args)
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_python = repo_root / ".venv" / "bin" / "python"
+        python_exe = os.environ.get("PYTEST_TASAK_PY") or (
+            str(venv_python) if venv_python.exists() else sys.executable
+        )
+        cmd = [python_exe, "-m", "tasak.main"] + list(args)
         result = subprocess.run(
             cmd, capture_output=True, text=True, env=test_env, timeout=10
         )

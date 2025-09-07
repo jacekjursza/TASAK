@@ -14,7 +14,36 @@ from typing import Any, Dict, List
 from dataclasses import dataclass
 
 from .mcp_real_client import MCPRealClient
-from .mcp_remote_client import MCPRemoteClient
+from .core.tool_service import ToolService
+from typing import Optional
+
+
+class CuratedMCPRemoteShim:
+    """Compatibility shim for curated mcp-remote backends.
+
+    Presents the same minimal interface as MCPRemoteClient used in curated paths,
+    but routes calls through the unified ToolService using the mcp-remote adapter.
+    Exposed as `MCPRemoteClient` symbol so tests patching tasak.curated_app.MCPRemoteClient
+    continue to work as expected.
+    """
+
+    def __init__(self, app_name: str, app_config: Dict[str, Any]):
+        self._svc = ToolService()
+        self._app = app_name
+        meta = app_config.get("meta", {})
+        url: Optional[str] = meta.get("server_url") or meta.get("url")
+        if not url:
+            raise ValueError(f"No server_url specified for {app_name}")
+        self._app_cfg = {"_mcp_config": {"transport": "mcp-remote", "server_url": url}}
+
+    def call_tool(self, tool: str, args: Dict[str, Any]):
+        import asyncio as _a
+
+        return _a.run(self._svc.call_tool_async(self._app, self._app_cfg, tool, args))
+
+
+# Export compatibility symbol for tests; points to shim by default
+MCPRemoteClient = CuratedMCPRemoteShim
 from .config import load_and_merge_configs
 
 
@@ -367,6 +396,7 @@ class CuratedApp:
         if app_type == "mcp":
             return MCPRealClient(app_name, app_config)
         elif app_type == "mcp-remote":
+            # Use compatibility symbol (shim by default, patched in tests)
             return MCPRemoteClient(app_name, app_config)
         else:
             return None

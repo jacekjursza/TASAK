@@ -53,7 +53,7 @@ python -m pip install --upgrade pip
 
 REM Install development dependencies
 echo Installing dependencies...
-pip install -e ".[mcp]"
+pip install -e "."
 pip install pytest pytest-cov pre-commit ruff ipython
 
 REM Install pre-commit hooks
@@ -113,7 +113,7 @@ goto :eof
 
 :install
 echo Installing TASAK in editable mode...
-pip install -e ".[mcp]"
+pip install -e "."
 echo TASAK installed!
 goto :eof
 

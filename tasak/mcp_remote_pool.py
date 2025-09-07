@@ -9,8 +9,12 @@ import asyncio
 import logging
 import threading
 import time
+import os
+import sys
+import atexit as _atexit_mod
+from concurrent.futures import Future as _CFuture
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, TextIO
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters
@@ -28,10 +32,17 @@ class PooledProcess:
     last_used: float
     app_name: str
     server_url: str
+    stdio_context: Any = None  # Store the stdio_client context manager
+    # Optional sink for child process stderr; closed on termination
+    errlog_handle: Optional[TextIO] = None
 
     @property
     def is_alive(self) -> bool:
         """Check if process is still running."""
+        # If process is None (managed by stdio_client), assume it's alive
+        # The session will fail if it's actually dead
+        if self.process is None:
+            return True
         return self.process.returncode is None
 
     @property
@@ -77,23 +88,29 @@ class MCPRemotePool:
         self._shutdown = False
         self._initialized = True
 
-        # Start cleanup task
-        self._start_cleanup_task()
+        # Dedicated asyncio loop thread to own all stdio contexts
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
 
-    def _start_cleanup_task(self):
-        """Start background task to clean up idle processes."""
+    def _run_loop(self):
+        asyncio.set_event_loop(self._loop)
 
-        def cleanup_worker():
+        async def _periodic():
             while not self._shutdown:
-                time.sleep(self.CLEANUP_INTERVAL)
                 try:
-                    # Run async cleanup in new event loop
-                    asyncio.run(self._cleanup_idle_processes())
+                    await asyncio.sleep(self.CLEANUP_INTERVAL)
+                    await self._cleanup_idle_processes()
+                except asyncio.CancelledError:
+                    break
                 except Exception as e:
                     logger.error(f"Error in cleanup task: {e}")
 
-        thread = threading.Thread(target=cleanup_worker, daemon=True)
-        thread.start()
+        self._cleanup_task = self._loop.create_task(_periodic())
+        self._loop.run_forever()
+
+    def _submit(self, coro: asyncio.coroutines) -> _CFuture:
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     async def _cleanup_idle_processes(self):
         """Remove processes that have been idle for too long."""
@@ -118,21 +135,22 @@ class MCPRemotePool:
         Get or create a session for the given app.
         Reuses existing process if available.
         """
+        # Ensure creation happens on the dedicated loop
+        fut = self._submit(self._get_or_create_session(app_name, server_url))
+        return await asyncio.wrap_future(fut)
+
+    async def _get_or_create_session(
+        self, app_name: str, server_url: str
+    ) -> ClientSession:
         async with self._pool_lock:
-            # Check if we have a live process
             if app_name in self._pool:
                 process = self._pool[app_name]
-
                 if process.is_alive and process.server_url == server_url:
                     process.last_used = time.time()
                     logger.debug(f"Reusing existing process for {app_name}")
                     return process.session
-                else:
-                    # Process died or server URL changed, remove it
-                    logger.info(f"Removing stale process for {app_name}")
-                    await self._terminate_process(app_name)
-
-            # Create new process
+                logger.info(f"Removing stale process for {app_name}")
+                await self._terminate_process(app_name)
             logger.info(f"Creating new process for {app_name}")
             return await self._create_process(app_name, server_url)
 
@@ -145,35 +163,45 @@ class MCPRemotePool:
             logger.info(f"Pool full, removing oldest process: {oldest.app_name}")
             await self._terminate_process(oldest.app_name)
 
-        # Start mcp-remote proxy process
+        # Start mcp-remote proxy process using stdio_client
+        from mcp.client.stdio import stdio_client
+
         server_params = StdioServerParameters(
             command="npx", args=["-y", "mcp-remote", server_url], env=None
         )
 
-        # Create process
-        process = await asyncio.create_subprocess_exec(
-            server_params.command,
-            *server_params.args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=server_params.env,
+        # Silence noisy mcp-remote stderr unless in TASAK_DEBUG/TASAK_VERBOSE
+        verbose = (os.environ.get("TASAK_DEBUG") == "1") or (
+            os.environ.get("TASAK_VERBOSE") == "1"
         )
+        err_sink: TextIO
+        if verbose:
+            err_sink = sys.stderr
+        else:
+            # Use a devnull sink to discard stderr without leaking fds indefinitely
+            err_sink = open(os.devnull, "w")
 
-        # Create MCP session
-        session = ClientSession(process.stdout, process.stdin)
+        # Create and store the context manager
+        stdio_ctx = stdio_client(server_params, errlog=err_sink)
+        read, write = await stdio_ctx.__aenter__()
 
-        # Initialize session
+        # Create MCP session with proper streams and start background receive loop
+        session = ClientSession(read, write)
+        # Enter session context to spawn background tasks required for request/response
+        await session.__aenter__()
+        # Initialize the session
         await session.initialize()
 
-        # Store in pool
+        # Store in pool with context
         pooled = PooledProcess(
-            process=process,
+            process=None,  # stdio_client manages the process
             session=session,
             created_at=time.time(),
             last_used=time.time(),
             app_name=app_name,
             server_url=server_url,
+            stdio_context=stdio_ctx,  # Keep the context alive
+            errlog_handle=None if verbose else err_sink,
         )
 
         self._pool[app_name] = pooled
@@ -183,6 +211,42 @@ class MCPRemotePool:
 
         return session
 
+    # New: safe helpers that execute on the dedicated loop
+    async def list_tools(self, app_name: str, server_url: str) -> List[Dict[str, Any]]:
+        async def _inner() -> List[Dict[str, Any]]:
+            session = await self._get_or_create_session(app_name, server_url)
+            resp = await session.list_tools()
+            tools: List[Dict[str, Any]] = []
+            for tool in resp.tools:
+                tools.append(
+                    {
+                        "name": getattr(tool, "name", None),
+                        "description": getattr(tool, "description", None),
+                        "input_schema": getattr(tool, "inputSchema", None),
+                    }
+                )
+            return tools
+
+        fut = self._submit(_inner())
+        return await asyncio.wrap_future(fut)
+
+    async def call_tool(
+        self, app_name: str, server_url: str, tool_name: str, arguments: Dict[str, Any]
+    ) -> Any:
+        async def _inner():
+            session = await self._get_or_create_session(app_name, server_url)
+            result = await session.call_tool(tool_name, arguments)
+            if getattr(result, "content", None) and len(result.content) > 0:
+                content = result.content[0]
+                if hasattr(content, "text"):
+                    return content.text
+                if hasattr(content, "data"):
+                    return content.data
+            return result
+
+        fut = self._submit(_inner())
+        return await asyncio.wrap_future(fut)
+
     async def _terminate_process(self, app_name: str):
         """Terminate a pooled process."""
         if app_name not in self._pool:
@@ -191,14 +255,30 @@ class MCPRemotePool:
         process_info = self._pool[app_name]
 
         try:
-            # Close session if possible
-            if hasattr(process_info.session, "close"):
+            # Close session context if possible
+            if hasattr(process_info.session, "__aexit__"):
+                await process_info.session.__aexit__(None, None, None)
+            elif hasattr(process_info.session, "close"):
                 await process_info.session.close()
         except Exception as e:
             logger.debug(f"Error closing session for {app_name}: {e}")
 
-        # Terminate process
-        if process_info.is_alive:
+        # Close stdio context if we have one
+        if process_info.stdio_context is not None:
+            try:
+                await process_info.stdio_context.__aexit__(None, None, None)
+            except Exception as e:
+                logger.debug(f"Error closing stdio context for {app_name}: {e}")
+
+        # Close errlog sink if we opened one
+        if process_info.errlog_handle is not None:
+            try:
+                process_info.errlog_handle.close()
+            except Exception:
+                pass
+
+        # Terminate process if we have one
+        elif process_info.process is not None and process_info.is_alive:
             process_info.process.terminate()
             try:
                 # Give it time to shutdown gracefully
@@ -218,10 +298,15 @@ class MCPRemotePool:
         logger.info("Shutting down process pool")
         self._shutdown = True
 
-        async with self._pool_lock:
-            for app_name in list(self._pool.keys()):
-                await self._terminate_process(app_name)
+        async def _shutdown_inner():
+            async with self._pool_lock:
+                for app_name in list(self._pool.keys()):
+                    await self._terminate_process(app_name)
+            # Stop loop after cleanup
+            self._loop.call_soon_threadsafe(self._loop.stop)
 
+        fut = self._submit(_shutdown_inner())
+        await asyncio.wrap_future(fut)
         logger.info("Process pool shutdown complete")
 
     def get_stats(self) -> Dict[str, Any]:
@@ -242,3 +327,37 @@ class MCPRemotePool:
             }
 
         return stats
+
+
+# Best-effort global cleanup to avoid hanging processes/threads at interpreter exit
+def _atexit_shutdown():
+    try:
+        # Only act if an instance exists
+        inst = MCPRemotePool._instance
+        if inst is None:
+            return
+        if getattr(inst, "_shutdown", False):
+            return
+
+        # Submit shutdown onto the pool's own loop and wait briefly
+        import concurrent.futures as _f
+
+        try:
+            fut: _f.Future = inst._submit(inst.shutdown())  # type: ignore[arg-type]
+            fut.result(timeout=2.0)
+        except Exception:
+            # As a last resort, stop the loop and join the thread briefly
+            try:
+                inst._loop.call_soon_threadsafe(inst._loop.stop)
+            except Exception:
+                pass
+            try:
+                inst._thread.join(timeout=0.5)
+            except Exception:
+                pass
+    except Exception:
+        # Never block interpreter shutdown due to cleanup issues
+        pass
+
+
+_atexit_mod.register(_atexit_shutdown)

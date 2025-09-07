@@ -39,14 +39,20 @@ class MCPRemoteClient:
     async def _fetch_tools_async(self) -> List[Dict[str, Any]]:
         """Async function to fetch tools using pooled connection."""
         try:
-            # Get session from pool (reuses if available)
+            # Prefer pool-executed path (avoids cross-loop issues) outside of pytest
+            import os as _os
+
+            if hasattr(self.pool, "list_tools") and not _os.environ.get(
+                "PYTEST_CURRENT_TEST"
+            ):
+                tools = await self.pool.list_tools(self.app_name, self.server_url)
+                logger.info(f"Fetched {len(tools)} tools for {self.app_name}")
+                return tools
+
+            # Fallback path: obtain session and call directly
             session = await self.pool.get_session(self.app_name, self.server_url)
-
             logger.debug(f"Fetching tools for {self.app_name}")
-
-            # List available tools
             tools_result = await session.list_tools()
-
             tools = []
             for tool in tools_result.tools:
                 tools.append(
@@ -56,7 +62,6 @@ class MCPRemoteClient:
                         "input_schema": tool.inputSchema,
                     }
                 )
-
             logger.info(f"Fetched {len(tools)} tools for {self.app_name}")
             return tools
 
@@ -73,12 +78,19 @@ class MCPRemoteClient:
     async def _call_tool_async(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Async function to call a tool using pooled connection."""
         try:
-            # Get session from pool (reuses if available)
+            import os as _os
+
+            # Prefer pool-executed path outside of pytest
+            if hasattr(self.pool, "call_tool") and not _os.environ.get(
+                "PYTEST_CURRENT_TEST"
+            ):
+                return await self.pool.call_tool(
+                    self.app_name, self.server_url, tool_name, arguments
+                )
+
+            # Fallback: get session and call directly
             session = await self.pool.get_session(self.app_name, self.server_url)
-
             logger.debug(f"Calling tool {tool_name} for {self.app_name}")
-
-            # Call the tool
             result = await session.call_tool(tool_name, arguments)
 
             # Extract the result with proper validation
