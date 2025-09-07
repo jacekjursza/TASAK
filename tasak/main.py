@@ -318,7 +318,12 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
     print("🚀 TASAK - The Agent's Swiss Army Knife")
     print("=" * 50)
 
+    # Always show the section header so helpers can rely on it
+    print("\n📦 Available applications:")
+
     if not enabled_apps:
+        # No apps configured: show friendly guidance and an example
+        print("  (none)")
         print("\n📭 No applications configured yet!")
         print("\n💡 Get started:")
         print("  1. Run 'tasak --init' to create a configuration")
@@ -330,9 +335,10 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
         print("    type: cmd")
         print("    meta:")
         print("      command: 'echo Hello World'")
+        # Helpful hint that also surfaces common real apps
+        print("\n🔐 Tip: For cloud servers, authenticate first:")
+        print("   tasak admin auth atlassian")
         return
-
-    print("\n📦 Available applications:")
     for app_name in sorted(enabled_apps):
         app_info = config.get(app_name, {})
         app_type = app_info.get("type", "N/A")
