@@ -139,7 +139,7 @@ sequenceDiagram
 
 ```bash
 # Install
-pipx install git+https://github.com/jacekjursza/TASAK.git
+pipx install tasak
 
 # Configure your first tool
 echo 'dev:

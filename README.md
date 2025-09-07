@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/jacekjursza/tasak.svg)](https://github.com/jacekjursza/tasak/releases/latest)
 
-📋 **[See what's new in v0.1.3 →](https://github.com/jacekjursza/TASAK/releases/tag/v0.1.3)**
+📋 **[See what's new in v0.1.3 →](https://github.com/jacekjursza/TASAK/blob/v0.1.3/CHANGELOG.md#013---2025-09-08)**
 
 ## 🚀 Why TASAK?
 
@@ -115,7 +115,7 @@ Global tools + project tools = perfect setup
 
 ### 1. Install (30 seconds)
 ```bash
-pipx install git+https://github.com/jacekjursza/TASAK.git
+pipx install tasak
 ```
 
 ### 2. Create Your First Power Tool (1 minute)

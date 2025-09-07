@@ -17,13 +17,13 @@
 ### One-Line Install
 
 ```bash
-pipx install git+https://github.com/jacekjursza/TASAK.git
+pipx install tasak
 ```
 
 No pipx? No problem:
 ```bash
 python -m pip install --user pipx && python -m pipx ensurepath
-# Then run the install command above
+# Then run: pipx install tasak
 ```
 
 ### Verify It Works
@@ -91,12 +91,12 @@ tasak
 
 ### Best Option: pipx (Isolated & Clean)
 ```bash
-pipx install git+https://github.com/jacekjursza/TASAK.git
+pipx install tasak
 ```
 
 ### Alternative: Direct pip
 ```bash
-pip install git+https://github.com/jacekjursza/TASAK.git
+pip install -U tasak
 ```
 
 ### For Contributors: Development Mode
