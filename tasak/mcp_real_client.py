@@ -11,6 +11,7 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client, StdioServerParameters
 import logging
+from .core.tool_service import ToolService
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
@@ -35,6 +36,8 @@ class MCPRealClient:
             self.mcp_config = self._load_mcp_config(app_config.get("config"))
             self.requires_auth = app_config.get("requires_auth", True)
         self.cache_path = self._get_cache_path(app_name)
+        # Unified core service
+        self._svc = ToolService()
 
     def _load_mcp_config(self, config_file: Optional[str]) -> Dict[str, Any]:
         """Load MCP configuration from file."""
@@ -72,30 +75,30 @@ class MCPRealClient:
         return cache_age < timedelta(seconds=CACHE_EXPIRATION_SECONDS)
 
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
-        """Get tool definitions from server or cache."""
-        # Check cache first
+        """Get tool definitions from server or cache using unified core."""
+        import os
+
+        debug = os.environ.get("TASAK_DEBUG") == "1"
+        # Prefer existing file cache behavior
         if self._is_cache_valid(self.cache_path):
             print("Loading tool definitions from cache.", file=sys.stderr)
+            if debug:
+                print(
+                    f"🔍 Debug: Cache hit for {self.app_name} at {self.cache_path}",
+                    file=sys.stderr,
+                )
             with open(self.cache_path, "r") as f:
                 return json.load(f)
 
-        # Fetch from server
+        if debug:
+            print(
+                "🔍 Debug: Cache miss or expired, fetching from server", file=sys.stderr
+            )
         print(
             f"Fetching tool definitions for '{self.app_name}' from server...",
             file=sys.stderr,
         )
-
-        # Add auth header if required
-        headers = self.mcp_config.get("headers", {}).copy()
-        if self.requires_auth:
-            access_token = self._get_access_token()
-            if access_token:
-                headers["Authorization"] = f"Bearer {access_token}"
-
-        # Run async function in sync context
-        tools = asyncio.run(self._fetch_tools_async(headers))
-
-        # Cache the results
+        tools = asyncio.run(self._svc.list_tools_async(self.app_name, self.app_config))
         if tools:
             with open(self.cache_path, "w") as f:
                 json.dump(tools, f, indent=2)
@@ -103,32 +106,30 @@ class MCPRealClient:
                 f"Successfully cached tool definitions to {self.cache_path}",
                 file=sys.stderr,
             )
-
         return tools
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
-        """Call a tool on the MCP server."""
-        # Debug: check if we have proper config
-        if not self.mcp_config:
-            print(
-                f"Error: No MCP configuration found for '{self.app_name}'",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        headers = self.mcp_config.get("headers", {}).copy()
-        if self.requires_auth:
-            access_token = self._get_access_token()
-            if access_token:
-                headers["Authorization"] = f"Bearer {access_token}"
-
-        # Run async function in sync context
+        """Call a tool using the unified core. Maintains legacy error behavior."""
         try:
-            result = asyncio.run(self._call_tool_async(tool_name, arguments, headers))
-            return result
+            return asyncio.run(
+                self._svc.call_tool_async(
+                    self.app_name, self.app_config, tool_name, arguments
+                )
+            )
         except KeyboardInterrupt:
             print("\nOperation cancelled by user.", file=sys.stderr)
-            sys.exit(130)  # Standard exit code for SIGINT
+            sys.exit(130)
+        except Exception as e:
+            error_msg = str(e)
+            if "ConnectionRefused" in error_msg or "TaskGroup" in error_msg:
+                print(
+                    f"Error: Cannot connect to '{self.app_name}' server.",
+                    file=sys.stderr,
+                )
+                print("Is the server running?", file=sys.stderr)
+            else:
+                print(f"Error executing tool '{tool_name}': {e}", file=sys.stderr)
+            sys.exit(1)
 
     def _get_access_token(self) -> Optional[str]:
         """Get access token if authentication is required."""

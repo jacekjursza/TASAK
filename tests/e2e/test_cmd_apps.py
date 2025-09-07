@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import subprocess
 from pathlib import Path
 
@@ -26,8 +27,19 @@ class TestCmdApps:
         test_env["TASAK_CONFIG"] = str(CONFIG_FILE)
         if env:
             test_env.update(env)
+        # Ensure subprocesses resolve 'python' to project venv first
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_bin = repo_root / ".venv" / "bin"
+        if venv_bin.exists():
+            test_env["PATH"] = f"{venv_bin}:{test_env.get('PATH','')}"
 
-        cmd = ["tasak"] + list(args)
+        # Prefer project venv interpreter if present, else current interpreter
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_python = repo_root / ".venv" / "bin" / "python"
+        python_exe = os.environ.get("PYTEST_TASAK_PY") or (
+            str(venv_python) if venv_python.exists() else sys.executable
+        )
+        cmd = [python_exe, "-m", "tasak.main"] + list(args)
         result = subprocess.run(cmd, capture_output=True, text=True, env=test_env)
         return result
 
@@ -109,8 +121,17 @@ class TestCmdProxyVsCurated:
         """Helper to run tasak with test config."""
         test_env = os.environ.copy()
         test_env["TASAK_CONFIG"] = str(CONFIG_FILE)
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_bin = repo_root / ".venv" / "bin"
+        if venv_bin.exists():
+            test_env["PATH"] = f"{venv_bin}:{test_env.get('PATH','')}"
 
-        cmd = ["tasak"] + list(args)
+        repo_root = Path(__file__).resolve().parents[2]
+        venv_python = repo_root / ".venv" / "bin" / "python"
+        python_exe = os.environ.get("PYTEST_TASAK_PY") or (
+            str(venv_python) if venv_python.exists() else sys.executable
+        )
+        cmd = [python_exe, "-m", "tasak.main"] + list(args)
         result = subprocess.run(cmd, capture_output=True, text=True, env=test_env)
         return result
 

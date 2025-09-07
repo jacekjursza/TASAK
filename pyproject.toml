@@ -30,10 +30,9 @@ keywords = ["ai-agents", "claude-code", "cursor", "copilot", "developer-tools", 
 dependencies = [
     "PyYAML==6.0.1",
     "requests",
+    "mcp>=1.13.1",
 ]
 
-[project.optional-dependencies]
-mcp = ["mcp>=1.13.1"]
 
 [project.scripts]
 tasak = "tasak.main:main"
@@ -41,3 +40,12 @@ tasak = "tasak.main:main"
 [project.urls]
 "Homepage" = "https://github.com/jacekjursza/tasak"
 "Bug Tracker" = "https://github.com/jacekjursza/tasak/issues"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+  # Silence rare unittest.mock interactions with async methods on MCPRemoteClient
+  'ignore:coroutine .*MCPRemoteClient\._call_tool_async.* was never awaited:RuntimeWarning',
+  'ignore:coroutine .*MCPRemoteClient\._fetch_tools_async.* was never awaited:RuntimeWarning',
+]

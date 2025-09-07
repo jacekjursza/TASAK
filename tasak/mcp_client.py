@@ -67,7 +67,9 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
 
         # If no cached schema or dynamic mode, fetch from server
         if not tool_defs:
-            client = MCPRealClient(app_name, app_config)
+            from .daemon.client import get_mcp_client
+
+            client = get_mcp_client(app_name, app_config)
             tool_defs = client.get_tool_definitions()
 
             # Cache the tools if we fetched them
@@ -104,8 +106,11 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     if not tool_name:
         return
 
-    # Call the tool using real MCP client
-    client = MCPRealClient(app_name, app_config)
+    # Get appropriate client (daemon or direct)
+    from .daemon.client import get_mcp_client
+
+    client = get_mcp_client(app_name, app_config)
+
     try:
         result = client.call_tool(tool_name, tool_args)
 

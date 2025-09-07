@@ -286,17 +286,25 @@ class TestRefreshAppSchema:
         captured = capsys.readouterr()
         assert "Schema refreshed for 'test_app' (1 tools)" in captured.out
 
-    @patch("tasak.mcp_remote_client.MCPRemoteClient")
-    def test_refresh_mcp_remote_app(self, mock_client_class, capsys):
+    def test_refresh_mcp_remote_app(self, capsys):
         """Test refreshing MCP-remote app schema."""
-        mock_client = Mock()
-        mock_client.get_tool_definitions.return_value = []
-        mock_client_class.return_value = mock_client
+        # Stub MCPRemoteClient in the imported module to avoid async attributes
+        from types import SimpleNamespace
 
-        # Mock the module import
+        class StubClient:
+            def __init__(self, *a, **k):
+                pass
+
+            def get_tool_definitions(self):
+                return []
+
         with patch.dict(
             "sys.modules",
-            {"tasak.mcp_remote_client": Mock(MCPRemoteClient=mock_client_class)},
+            {
+                "tasak.mcp_remote_client": SimpleNamespace(
+                    MCPRemoteClient=lambda *a, **k: StubClient()
+                )
+            },
         ):
             app_config = {"type": "mcp-remote", "meta": {"server_url": "http://test"}}
             refresh_app_schema("test_app", app_config)

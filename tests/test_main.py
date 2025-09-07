@@ -6,23 +6,41 @@ from tasak.main import main, _list_available_apps, _cleanup_pool
 class TestCleanupPool:
     """Tests for _cleanup_pool function."""
 
-    @patch("tasak.mcp_remote_pool.MCPRemotePool")
-    def test_cleanup_pool_success(self, mock_pool_class):
-        """Test successful pool cleanup."""
-        with patch("asyncio.run") as mock_run:
-            mock_pool = MagicMock()
-            mock_pool_class.return_value = mock_pool
+    def test_cleanup_pool_success(self):
+        """Test successful pool cleanup without creating a new pool."""
+        # Prepare a fake existing instance with a completed future
+        import concurrent.futures as cf
 
+        fake_inst = MagicMock()
+        fut = cf.Future()
+        fut.set_result(None)
+        fake_inst._submit.return_value = fut
+        fake_inst._shutdown = False
+
+        # Patch the class-level _instance to simulate existing pool
+        with patch(
+            "tasak.mcp_remote_pool.MCPRemotePool._instance", fake_inst, create=True
+        ):
             _cleanup_pool()
-
-            mock_pool_class.assert_called_once()
-            mock_run.assert_called_once()
+            fake_inst._submit.assert_called()
 
     def test_cleanup_pool_error_ignored(self):
         """Test that errors during cleanup are ignored."""
-        with patch("tasak.mcp_remote_pool.MCPRemotePool") as mock_pool_class:
-            mock_pool_class.side_effect = Exception("Pool error")
+        import concurrent.futures as cf
 
+        fake_inst = MagicMock()
+        fut = cf.Future()
+
+        # Make future raise when awaited
+        def _raise():
+            raise RuntimeError("boom")
+
+        fake_inst._submit.side_effect = _raise
+        fake_inst._shutdown = False
+
+        with patch(
+            "tasak.mcp_remote_pool.MCPRemotePool._instance", fake_inst, create=True
+        ):
             # Should not raise
             _cleanup_pool()
 

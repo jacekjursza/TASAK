@@ -14,15 +14,44 @@ from tasak.init_command import handle_init_command
 
 
 def _cleanup_pool():
-    """Clean up the MCP Remote process pool on exit."""
+    """Best-effort cleanup of MCPRemotePool without creating it at exit.
+
+    Avoids instantiating the pool during interpreter shutdown and avoids
+    blocking the process with a long await. Mirrors the pool's internal
+    atexit logic with bounded waits.
+    """
     try:
         from tasak.mcp_remote_pool import MCPRemotePool
-        import asyncio
+        import logging
+        import concurrent.futures as _f
 
-        pool = MCPRemotePool()
-        asyncio.run(pool.shutdown())
+        # Suppress noisy asyncio generator-close logs during shutdown
+        try:
+            logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+        except Exception:
+            pass
+
+        inst = getattr(MCPRemotePool, "_instance", None)
+        if not inst or getattr(inst, "_shutdown", False):
+            return
+
+        # Submit shutdown to the pool's own loop and wait briefly.
+        try:
+            fut: _f.Future = inst._submit(inst.shutdown())  # type: ignore[attr-defined]
+            fut.result(timeout=2.0)
+        except Exception:
+            # As a fallback, try to stop the loop and join the thread briefly.
+            try:
+                inst._loop.call_soon_threadsafe(inst._loop.stop)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                inst._thread.join(timeout=0.5)  # type: ignore[attr-defined]
+            except Exception:
+                pass
     except Exception:
-        pass  # Ignore errors during cleanup
+        # Never raise during interpreter shutdown
+        pass
 
 
 def main():
@@ -64,6 +93,55 @@ def main():
 
     config = load_and_merge_configs()
 
+    # Check if first argument is 'daemon'
+    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
+        # Handle daemon commands
+        from .daemon.manager import handle_daemon_command
+
+        parser = argparse.ArgumentParser(
+            prog="tasak daemon", description="Manage TASAK background daemon"
+        )
+        subparsers = parser.add_subparsers(
+            dest="daemon_command", help="Daemon command to execute"
+        )
+
+        # Add daemon subcommands
+        start_parser = subparsers.add_parser("start", help="Start the daemon")
+        start_parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Verbose logging (debug)"
+        )
+        start_parser.add_argument(
+            "--log-level",
+            choices=["debug", "info", "warning", "error"],
+            help="Set daemon log level",
+        )
+
+        subparsers.add_parser("stop", help="Stop the daemon")
+
+        restart_parser = subparsers.add_parser("restart", help="Restart the daemon")
+        restart_parser.add_argument(
+            "-v", "--verbose", action="store_true", help="Verbose logging (debug)"
+        )
+        restart_parser.add_argument(
+            "--log-level",
+            choices=["debug", "info", "warning", "error"],
+            help="Set daemon log level",
+        )
+        subparsers.add_parser("status", help="Show daemon status")
+
+        logs_parser = subparsers.add_parser("logs", help="Show daemon logs")
+        logs_parser.add_argument(
+            "-n", "--lines", type=int, default=50, help="Number of lines to show"
+        )
+        logs_parser.add_argument(
+            "-f", "--follow", action="store_true", help="Follow log output"
+        )
+
+        # Parse and handle (skip 'daemon' from argv)
+        args = parser.parse_args(sys.argv[2:])
+        handle_daemon_command(args)
+        return
+
     # Check if first argument is 'admin'
     if len(sys.argv) > 1 and sys.argv[1] == "admin":
         # Handle admin commands with a dedicated parser
@@ -103,8 +181,21 @@ def main():
     parser.add_argument(
         "--list-apps", "-l", action="store_true", help="List available applications"
     )
+    # Add --debug flag for testing
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Debug mode: bypass daemon, show detailed logs and timing",
+    )
 
     args, unknown_args = parser.parse_known_args()
+
+    # Set debug mode globally
+    if args.debug:
+        import os
+
+        os.environ["TASAK_DEBUG"] = "1"
+        print("🔍 Debug mode enabled", file=sys.stderr)
 
     # Manual help handling
     if args.help and not args.app_name:
