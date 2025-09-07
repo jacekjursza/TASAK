@@ -64,6 +64,16 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
 
     # App-level simplified help
     if len(app_args) == 1 and app_args[0] in ("--help", "-h"):
+        # If tool defs are missing, make a best-effort direct fetch bypassing cache
+        if not tool_defs:
+            try:
+                from .core.tool_service import ToolService
+
+                tool_defs = asyncio.run(
+                    ToolService().list_tools_async(app_name, app_config)
+                )
+            except Exception:
+                tool_defs = []
         show_simplified_app_help(app_name, tool_defs or [], app_type="mcp")
         return
 

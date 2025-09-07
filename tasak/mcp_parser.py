@@ -164,7 +164,38 @@ def parse_mcp_args(
         namespace = argparse.Namespace(tool_name=tool_name)
         return tool_name, tool_args, namespace
 
-    # Build parser for dynamic/curated modes
+    # If we have no tool definitions, fall back to a permissive proxy-style parse.
+    # This tolerates servers that are slow to list tools or when listing fails.
+    if not tool_defs:
+        # Proxy-like behavior: first positional is tool name; parse --key value pairs
+        if not app_args:
+            # Nothing to do; return minimal namespace
+            return None, {}, argparse.Namespace(tool_name=None)
+
+        # If asking for help, we don't know tools; return minimal to let caller print generic help
+        if len(app_args) == 1 and app_args[0] in ("--help", "-h"):
+            return None, {}, argparse.Namespace(tool_name=None)
+
+        # Otherwise parse flexibly
+        if not app_args[0].startswith("-"):
+            tool_name = app_args[0]
+            tool_args: Dict[str, Any] = {}
+            i = 1
+            while i < len(app_args):
+                arg = app_args[i]
+                if arg.startswith("--"):
+                    key = arg[2:]
+                    if i + 1 < len(app_args) and not app_args[i + 1].startswith("--"):
+                        tool_args[key] = app_args[i + 1]
+                        i += 2
+                    else:
+                        tool_args[key] = True
+                        i += 1
+                else:
+                    i += 1
+            return tool_name, tool_args, argparse.Namespace(tool_name=tool_name)
+
+    # Build parser for dynamic/curated modes when tools are known
     parser = build_mcp_parser(app_name, tool_defs, app_type)
 
     # Parse arguments

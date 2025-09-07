@@ -166,9 +166,8 @@ def _get_tool_defs_for_help(
     schema_manager = SchemaManager()
     schema_data = schema_manager.load_schema(app_name)
     if schema_data:
-        age_days = schema_manager.get_schema_age_days(app_name) or 0
-        if age_days < 1:
-            return schema_manager.convert_to_tool_list(schema_data)
+        # For help display, prefer any cached schema regardless of age to avoid slow fetches
+        return schema_manager.convert_to_tool_list(schema_data)
 
     # Cache is missing or stale (>= 1 day) — fetch quietly
     try:

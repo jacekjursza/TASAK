@@ -254,6 +254,11 @@ def main():
     enabled_apps = apps_config.get("enabled_apps", [])
 
     if app_name not in enabled_apps:
+        # If user requested help for a non-enabled/unknown app, show top-level help gracefully
+        if args.help:
+            parser.print_help()
+            print(f"\n💡 Quick start: Run '{binary} --init' to create a configuration")
+            return
         print(
             f"❌ Error: App '{app_name}' is not enabled or does not exist.",
             file=sys.stderr,
