@@ -2,7 +2,7 @@
 
 **Transform your AI coding assistant into a productivity powerhouse with custom tools and workflows tailored to YOUR codebase.**
 
-[![PyPI version](https://badge.fury.io/py/tasak.svg)](https://badge.fury.io/py/tasak)
+[![PyPI version](https://img.shields.io/pypi/v/tasak.svg)](https://pypi.org/project/tasak/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/jacekjursza/tasak.svg)](https://github.com/jacekjursza/tasak/releases/latest)
 
