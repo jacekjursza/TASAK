@@ -99,6 +99,15 @@ pipx install tasak
 pip install -U tasak
 ```
 
+### From GitHub (edge)
+```bash
+# pipx (isolated)
+pipx install git+https://github.com/jacekjursza/TASAK.git
+
+# pip (user env)
+pip install -U git+https://github.com/jacekjursza/TASAK.git
+```
+
 ### For Contributors: Development Mode
 ```bash
 git clone https://github.com/jacekjursza/TASAK.git

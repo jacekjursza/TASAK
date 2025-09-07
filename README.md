@@ -118,6 +118,15 @@ Global tools + project tools = perfect setup
 pipx install tasak
 ```
 
+Optional (edge builds from GitHub):
+```bash
+# pipx
+pipx install git+https://github.com/jacekjursza/TASAK.git
+
+# or pip
+pip install -U git+https://github.com/jacekjursza/TASAK.git
+```
+
 ### 2. Create Your First Power Tool (1 minute)
 ```bash
 cat > ~/.tasak/tasak.yaml << 'EOF'
