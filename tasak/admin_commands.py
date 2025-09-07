@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from .auth import run_auth_app
 from .python_plugins import discover_python_plugins, get_plugin_search_dirs
 from .mcp_real_client import MCPRealClient
 from .schema_manager import SchemaManager
@@ -280,10 +279,44 @@ def handle_auth(args: argparse.Namespace, config: Dict[str, Any]):
     else:
         # Perform authentication
         print(f"Authenticating with '{app_name}'...")
-        # For MCP-remote apps, we need the server URL
+        # For MCP-remote apps, delegate to mcp-remote tool
         if app_config.get("type") == "mcp-remote":
             server_url = app_config.get("meta", {}).get("server_url")
-            run_auth_app(app_name, server_url=server_url)
+            if not server_url:
+                print(
+                    f"Error: server_url not configured for '{app_name}'",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            # Use npx mcp-remote for authentication
+            import subprocess
+
+            cmd = ["npx", "-y", "mcp-remote", server_url]
+            print("Starting authentication flow...", file=sys.stderr)
+            print("A browser window will open for authentication.", file=sys.stderr)
+
+            try:
+                result = subprocess.run(cmd, timeout=120)  # 2 minute timeout
+                if result.returncode == 0:
+                    print("Authentication successful!", file=sys.stderr)
+                else:
+                    print(
+                        "Authentication may have failed or was cancelled.",
+                        file=sys.stderr,
+                    )
+            except subprocess.TimeoutExpired:
+                print("Authentication timed out.", file=sys.stderr)
+            except FileNotFoundError:
+                print(
+                    "Error: npx not found. Please install Node.js first.",
+                    file=sys.stderr,
+                )
+                print("Visit: https://nodejs.org/", file=sys.stderr)
+            except KeyboardInterrupt:
+                print("\nAuthentication cancelled by user.", file=sys.stderr)
+            except Exception as e:
+                print(f"Error during authentication: {e}", file=sys.stderr)
         else:
             # For regular MCP apps, no auth needed typically
             print(f"App '{app_name}' does not require authentication.", file=sys.stderr)

@@ -28,10 +28,15 @@ class PooledProcess:
     last_used: float
     app_name: str
     server_url: str
+    stdio_context: Any = None  # Store the stdio_client context manager
 
     @property
     def is_alive(self) -> bool:
         """Check if process is still running."""
+        # If process is None (managed by stdio_client), assume it's alive
+        # The session will fail if it's actually dead
+        if self.process is None:
+            return True
         return self.process.returncode is None
 
     @property
@@ -145,35 +150,32 @@ class MCPRemotePool:
             logger.info(f"Pool full, removing oldest process: {oldest.app_name}")
             await self._terminate_process(oldest.app_name)
 
-        # Start mcp-remote proxy process
+        # Start mcp-remote proxy process using stdio_client
+        from mcp.client.stdio import stdio_client
+
         server_params = StdioServerParameters(
             command="npx", args=["-y", "mcp-remote", server_url], env=None
         )
 
-        # Create process
-        process = await asyncio.create_subprocess_exec(
-            server_params.command,
-            *server_params.args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=server_params.env,
-        )
+        # Create and store the context manager
+        stdio_ctx = stdio_client(server_params)
+        read, write = await stdio_ctx.__aenter__()
 
-        # Create MCP session
-        session = ClientSession(process.stdout, process.stdin)
+        # Create MCP session with proper streams
+        session = ClientSession(read, write)
 
         # Initialize session
         await session.initialize()
 
-        # Store in pool
+        # Store in pool with context
         pooled = PooledProcess(
-            process=process,
+            process=None,  # stdio_client manages the process
             session=session,
             created_at=time.time(),
             last_used=time.time(),
             app_name=app_name,
             server_url=server_url,
+            stdio_context=stdio_ctx,  # Keep the context alive
         )
 
         self._pool[app_name] = pooled
@@ -197,8 +199,15 @@ class MCPRemotePool:
         except Exception as e:
             logger.debug(f"Error closing session for {app_name}: {e}")
 
-        # Terminate process
-        if process_info.is_alive:
+        # Close stdio context if we have one
+        if process_info.stdio_context is not None:
+            try:
+                await process_info.stdio_context.__aexit__(None, None, None)
+            except Exception as e:
+                logger.debug(f"Error closing stdio context for {app_name}: {e}")
+
+        # Terminate process if we have one
+        elif process_info.process is not None and process_info.is_alive:
             process_info.process.terminate()
             try:
                 # Give it time to shutdown gracefully

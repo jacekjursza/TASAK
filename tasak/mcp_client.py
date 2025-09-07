@@ -11,6 +11,7 @@ from mcp import ClientSession
 from mcp.client.stdio import stdio_client, StdioServerParameters
 
 from .mcp_real_client import MCPRealClient
+from .mcp_parser import parse_mcp_args, show_tool_help
 from .schema_manager import SchemaManager
 
 CACHE_EXPIRATION_SECONDS = 15 * 60  # 15 minutes
@@ -21,7 +22,12 @@ ATLASSIAN_CLIENT_ID = "5Dzgchq9CCu2EIgv"
 
 def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
     """Main entry point for running an MCP application."""
-    if "--interactive" in app_args:
+    # Check for special commands that don't need tool definitions
+    if "--clear-cache" in app_args:
+        _clear_cache(app_name, app_config)
+        return
+
+    if "--interactive" in app_args or "-i" in app_args:
         # Interactive mode requires special handling with asyncio
         try:
             mcp_config_path = app_config.get("config")
@@ -37,96 +43,66 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
             print("\nInteractive session terminated by user.", file=sys.stderr)
         return
 
-    if "--clear-cache" in app_args:
-        _clear_cache(app_name, app_config)
-        return
-
     # Determine mode
     meta = app_config.get("meta", {})
     mode = meta.get("mode", "dynamic")  # Default to dynamic for backward compatibility
 
-    if mode == "proxy":
-        # Proxy mode - pass arguments directly without validation
-        _run_proxy_mode(app_name, app_config, app_args)
-        return
-
-    # Get tool definitions (for curated and dynamic modes)
+    # Get tool definitions (not needed for proxy mode)
     tool_defs = None
-    schema_manager = SchemaManager()
+    if mode != "proxy":
+        schema_manager = SchemaManager()
 
-    if mode == "curated":
-        # Try to load from cached schema first
-        schema_data = schema_manager.load_schema(app_name)
-        if schema_data:
-            tool_defs = schema_manager.convert_to_tool_list(schema_data)
-            # Show age of schema if old
-            age_days = schema_manager.get_schema_age_days(app_name)
-            if age_days and age_days > 7:
-                print(
-                    f"Note: Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
-                    file=sys.stderr,
-                )
-
-    # If no cached schema or dynamic mode, fetch from server
-    if not tool_defs:
-        client = MCPRealClient(app_name, app_config)
-        tool_defs = client.get_tool_definitions()
-
-    if not tool_defs:
-        print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
-        if mode == "curated" and schema_manager.schema_exists(app_name):
-            print("Schema file exists but couldn't be loaded.", file=sys.stderr)
-        else:
-            print("This could mean:", file=sys.stderr)
-            print("  - The server is not running", file=sys.stderr)
-            print("  - The server has no tools exposed", file=sys.stderr)
-            print("  - There's a configuration issue", file=sys.stderr)
-            if mode == "curated":
-                print(
-                    f"  - No cached schema. Run 'tasak admin refresh {app_name}' first.",
-                    file=sys.stderr,
-                )
-        sys.exit(1)
-
-    parser = _build_parser(app_name, tool_defs)
-    parsed_args = parser.parse_args(app_args)
-
-    if not hasattr(parsed_args, "tool_name") or not parsed_args.tool_name:
-        parser.print_help()
-        sys.exit(1)
-
-    tool_name = parsed_args.tool_name
-    # Filter out TASAK-specific arguments before passing to MCP server
-    TASAK_FLAGS = {"clear_cache"}  # Add more as needed
-    tool_args = {
-        k: v
-        for k, v in vars(parsed_args).items()
-        if k != "tool_name" and k not in TASAK_FLAGS
-    }
-
-    # Get the tool schema and convert argument types
-    tool_schema = next((t for t in tool_defs if t["name"] == tool_name), None)
-    if tool_schema:
-        for arg_name, arg_value in tool_args.items():
-            if arg_value is None:
-                continue
-            param_schema = (
-                tool_schema.get("input_schema", {}).get("properties", {}).get(arg_name)
-            )
-            if param_schema:
-                param_type = param_schema.get("type")
-                try:
-                    if param_type == "integer":
-                        tool_args[arg_name] = int(arg_value)
-                    elif param_type == "number":
-                        tool_args[arg_name] = float(arg_value)
-                    elif param_type == "boolean":
-                        tool_args[arg_name] = bool(arg_value)
-                except (ValueError, TypeError):
+        if mode == "curated":
+            # Try to load from cached schema first
+            schema_data = schema_manager.load_schema(app_name)
+            if schema_data:
+                tool_defs = schema_manager.convert_to_tool_list(schema_data)
+                # Show age of schema if old
+                age_days = schema_manager.get_schema_age_days(app_name)
+                if age_days and age_days > 7:
                     print(
-                        f"Warning: Could not convert argument '{arg_name}' to type '{param_type}'",
+                        f"Note: Schema is {age_days} days old. Consider 'tasak admin refresh {app_name}'.",
                         file=sys.stderr,
                     )
+
+        # If no cached schema or dynamic mode, fetch from server
+        if not tool_defs:
+            client = MCPRealClient(app_name, app_config)
+            tool_defs = client.get_tool_definitions()
+
+            # Cache the tools if we fetched them
+            if tool_defs and mode == "dynamic":
+                schema_manager.save_schema(app_name, tool_defs)
+
+        if not tool_defs and "--help" not in app_args:
+            print(f"Error: No tools available for '{app_name}'.", file=sys.stderr)
+            if mode == "curated" and schema_manager.schema_exists(app_name):
+                print("Schema file exists but couldn't be loaded.", file=sys.stderr)
+            else:
+                print("This could mean:", file=sys.stderr)
+                print("  - The server is not running", file=sys.stderr)
+                print("  - The server has no tools exposed", file=sys.stderr)
+                print("  - There's a configuration issue", file=sys.stderr)
+                if mode == "curated":
+                    print(
+                        f"  - No cached schema. Run 'tasak admin refresh {app_name}' first.",
+                        file=sys.stderr,
+                    )
+            sys.exit(1)
+
+    # Parse arguments using the unified parser
+    tool_name, tool_args, parsed_args = parse_mcp_args(
+        app_name, tool_defs or [], app_args, app_type="mcp", mode=mode
+    )
+
+    # Handle help display
+    if "--help" in app_args and not tool_name:
+        show_tool_help(app_name, tool_defs or [], app_type="mcp")
+        return
+
+    # If no tool specified, exit (parse_mcp_args already showed help)
+    if not tool_name:
+        return
 
     # Call the tool using real MCP client
     client = MCPRealClient(app_name, app_config)
@@ -237,15 +213,15 @@ async def run_interactive_session_async(app_name: str, mcp_config: Dict[str, Any
                         # Call the tool
                         result = await session.call_tool(tool_name, tool_args)
 
-                        # Print result
-                        if result.content and len(result.content) > 0:
-                            content = result.content[0]
-                            if hasattr(content, "text"):
-                                print(content.text)
-                            elif hasattr(content, "data"):
-                                print(json.dumps(content.data, indent=2))
+                        # Display the result
+                        if isinstance(result.content, list):
+                            for item in result.content:
+                                if item.type == "text":
+                                    print(item.text)
+                                else:
+                                    print(json.dumps(item, indent=2))
                         else:
-                            print(f"Tool '{tool_name}' executed.")
+                            print(json.dumps(result.content, indent=2))
 
                     except Exception as e:
                         print(f"Error calling tool '{tool_name}': {e}", file=sys.stderr)
@@ -257,42 +233,6 @@ async def run_interactive_session_async(app_name: str, mcp_config: Dict[str, Any
 
     if is_tty:
         print("\nExiting interactive session.")
-
-
-def _run_proxy_mode(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
-    """Run MCP app in proxy mode - no validation, direct pass-through."""
-    if not app_args:
-        print(f"Usage: tasak {app_name} <tool_name> [args...]", file=sys.stderr)
-        sys.exit(1)
-
-    tool_name = app_args[0]
-    tool_args = {}
-
-    # Simple argument parsing - everything after tool name
-    i = 1
-    while i < len(app_args):
-        arg = app_args[i]
-        if arg.startswith("--"):
-            key = arg[2:]
-            if i + 1 < len(app_args) and not app_args[i + 1].startswith("--"):
-                # Has value
-                tool_args[key] = app_args[i + 1]
-                i += 2
-            else:
-                # Boolean flag
-                tool_args[key] = True
-                i += 1
-        else:
-            i += 1
-
-    # Call tool without validation
-    client = MCPRealClient(app_name, app_config)
-    result = client.call_tool(tool_name, tool_args)
-
-    if isinstance(result, dict) or isinstance(result, list):
-        print(json.dumps(result, indent=2))
-    else:
-        print(result)
 
 
 def _get_access_token(app_name: str) -> str:
@@ -357,31 +297,6 @@ def _clear_cache(app_name: str, app_config: Dict[str, Any]):
     client.clear_cache()
 
 
-def _build_parser(
-    app_name: str, tool_defs: List[Dict[str, Any]]
-) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog=f"tasak {app_name}", description=f"Interface for '{app_name}' MCP app."
-    )
-    parser.add_argument(
-        "--clear-cache", action="store_true", help="Clear local tool definition cache."
-    )
-    subparsers = parser.add_subparsers(dest="tool_name", title="Available Tools")
-    for tool in tool_defs:
-        tool_name = tool["name"]
-        tool_desc = tool.get("description", "")
-        tool_parser = subparsers.add_parser(
-            tool_name, help=tool_desc, description=tool_desc
-        )
-        schema = tool.get("input_schema", {})
-        for prop_name, prop_details in schema.get("properties", {}).items():
-            arg_name = f"--{prop_name}"
-            arg_help = prop_details.get("description", "")
-            is_required = prop_name in schema.get("required", [])
-            tool_parser.add_argument(arg_name, help=arg_help, required=is_required)
-    return parser
-
-
 def _load_mcp_config(path_str: str) -> Dict[str, Any]:
     expanded_path = Path(os.path.expandvars(os.path.expanduser(path_str)))
     if not expanded_path.exists():
@@ -397,47 +312,22 @@ def _load_mcp_config(path_str: str) -> Dict[str, Any]:
 
 
 def _get_tool_definitions(
-    app_name: str, mcp_config: Dict[str, Any]
+    app_name: str,
+    config_path: Path,
+    cache_path: Path = None,
+    always_fetch: bool = False,
 ) -> List[Dict[str, Any]]:
-    cache_path = _get_cache_path(app_name)
-    if _is_cache_valid(cache_path):
-        print("Loading tool definitions from cache.", file=sys.stderr)
-        with open(cache_path, "r") as f:
-            return json.load(f)
-    return _fetch_and_cache_definitions(app_name, mcp_config, cache_path)
+    """Fetches or loads cached tool definitions for an MCP app."""
+    if cache_path and cache_path.exists() and not always_fetch:
+        try:
+            with open(cache_path, "r") as f:
+                cache_data = json.load(f)
+                if (
+                    time.time() - cache_data.get("timestamp", 0)
+                    < CACHE_EXPIRATION_SECONDS
+                ):
+                    return cache_data["tools"]
+        except (json.JSONDecodeError, KeyError):
+            pass
 
-
-def _get_cache_path(app_name: str) -> Path:
-    cache_dir = Path.home() / ".tasak" / "cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f"{app_name}.json"
-
-
-def _is_cache_valid(cache_path: Path) -> bool:
-    if not cache_path.exists():
-        return False
-    age = time.time() - cache_path.stat().st_mtime
-    return age < CACHE_EXPIRATION_SECONDS
-
-
-def _fetch_and_cache_definitions(
-    app_name: str, mcp_config: Dict[str, Any], cache_path: Path
-) -> List[Dict[str, Any]]:
-    print(f"Fetching tool definitions for '{app_name}' from server...", file=sys.stderr)
-    transport = mcp_config.get("transport")
-    if transport != "sse":
-        print(
-            f"Error: Unsupported MCP transport '{transport}'. MVP only supports 'sse'.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    url = mcp_config.get("url")
-    if not url:
-        print("Error: 'url' not specified in MCP config.", file=sys.stderr)
-        sys.exit(1)
-    # This function is deprecated - now handled by MCPRealClient
-    print(
-        "Warning: Using deprecated function _fetch_and_cache_definitions",
-        file=sys.stderr,
-    )
     return []

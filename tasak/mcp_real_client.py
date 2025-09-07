@@ -26,9 +26,15 @@ class MCPRealClient:
     def __init__(self, app_name: str, app_config: Dict[str, Any]):
         self.app_name = app_name
         self.app_config = app_config
-        self.mcp_config = self._load_mcp_config(app_config.get("config"))
+        # Check for dynamic config first (used by mcp-remote)
+        if "_mcp_config" in app_config:
+            self.mcp_config = app_config["_mcp_config"]
+            # mcp-remote handles its own auth, don't check auth.json
+            self.requires_auth = False
+        else:
+            self.mcp_config = self._load_mcp_config(app_config.get("config"))
+            self.requires_auth = app_config.get("requires_auth", True)
         self.cache_path = self._get_cache_path(app_name)
-        self.requires_auth = app_config.get("requires_auth", True)
 
     def _load_mcp_config(self, config_file: Optional[str]) -> Dict[str, Any]:
         """Load MCP configuration from file."""
@@ -102,6 +108,14 @@ class MCPRealClient:
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Call a tool on the MCP server."""
+        # Debug: check if we have proper config
+        if not self.mcp_config:
+            print(
+                f"Error: No MCP configuration found for '{self.app_name}'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         headers = self.mcp_config.get("headers", {}).copy()
         if self.requires_auth:
             access_token = self._get_access_token()
@@ -123,7 +137,7 @@ class MCPRealClient:
 
         if not AUTH_FILE_PATH.exists():
             print(
-                f"Error: Not authenticated for '{self.app_name}'. Please run 'tasak auth {self.app_name}' first.",
+                f"Error: Not authenticated for '{self.app_name}'. Please run 'tasak admin auth {self.app_name}' first.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -134,7 +148,7 @@ class MCPRealClient:
         token_data = all_tokens.get(self.app_name)
         if not token_data:
             print(
-                f"Error: No authentication data found for '{self.app_name}'. Please run 'tasak auth {self.app_name}' first.",
+                f"Error: No authentication data found for '{self.app_name}'. Please run 'tasak admin auth {self.app_name}' first.",
                 file=sys.stderr,
             )
             sys.exit(1)
