@@ -28,6 +28,7 @@
   - [Command fails silently](#command-fails-silently)
   - [Arguments not working](#arguments-not-working)
 - [Next Steps](#next-steps)
+ - [Create a Standalone Command](#create-a-standalone-command)
 
 
 This guide covers creating and using simple `cmd` apps - the foundation of TASAK.
@@ -316,6 +317,27 @@ generate_docs:
   meta:
     command: "sphinx-build -b html docs/ docs/_build"
 ```
+
+## Create a Standalone Command
+
+Turn your TASAK config into its own CLI wrapper (uses `<name>.yaml` instead of `tasak.yaml`).
+
+```bash
+# Create wrapper in current directory
+tasak admin create_command mytool
+
+# Run locally (current dir is not in PATH)
+./mytool --help
+
+# Install globally (~/.local/bin/mytool)
+tasak admin create_command mytool --global
+# Ensure ~/.local/bin is in PATH (e.g., add to ~/.bashrc)
+```
+
+Notes:
+- Wrapper sets `TASAK_CONFIG_NAME=mytool.yaml` and `TASAK_BIN_NAME=mytool`.
+- Config resolution merges `~/.tasak/mytool.yaml` with local `./mytool.yaml` and `./.tasak/mytool.yaml`.
+- See Advanced Usage → “Custom Commands (create_command)” for details.
 
 ## Tips and Best Practices
 
