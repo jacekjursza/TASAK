@@ -111,7 +111,7 @@ class TestRunMCPRemoteApp:
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_curated_mode_with_cached_schema(self, mock_schema_manager_class, capsys):
-        """Test curated mode with cached schema."""
+        """No args → fallback to help (grouped), not plain listing."""
         app_config = {"meta": {"server_url": "https://example.com", "mode": "curated"}}
 
         # Mock schema manager
@@ -123,16 +123,16 @@ class TestRunMCPRemoteApp:
         mock_schema_manager.get_schema_age_days.return_value = 10
         mock_schema_manager_class.return_value = mock_schema_manager
 
-        # Test listing tools via help-style output
         run_mcp_remote_app("test_app", app_config, [])
 
         captured = capsys.readouterr()
-        # Minimal listing: just tool names
-        assert captured.out.strip() == "tool1"
+        out = captured.out.strip().splitlines()
+        assert '"test_app" commands:' in out[0]
+        assert any(line.startswith("tool1 - Test tool") for line in out)
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_dynamic_mode_fetches_tools(self, mock_schema_manager_class, capsys):
-        """Test dynamic mode fetches tools from server."""
+        """No args in dynamic mode → help shown; schema cached."""
         app_config = {"meta": {"server_url": "https://example.com", "mode": "dynamic"}}
 
         # Mock schema manager
@@ -147,7 +147,7 @@ class TestRunMCPRemoteApp:
 
         stub = StubClient()
 
-        # Test listing tools
+        # No-arg invocation shows help (not plain listing)
         with patch("tasak.mcp_remote_runner.MCPRemoteClient", new=lambda *a, **k: stub):
             run_mcp_remote_app("test_app", app_config, [])
         mock_schema_manager.save_schema.assert_called_once_with(
@@ -155,11 +155,13 @@ class TestRunMCPRemoteApp:
         )
 
         captured = capsys.readouterr()
-        assert captured.out.strip() == "tool1"
+        out = captured.out.strip().splitlines()
+        assert '"test_app" commands:' in out[0]
+        assert any(line.startswith("tool1 - Test tool") for line in out)
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_no_tools_available_error(self, mock_schema_manager_class, capsys):
-        """Test error when no tools are available."""
+        """No tools → help headers printed (graceful fallback)."""
         app_config = {"meta": {"server_url": "https://example.com"}}
 
         # Mock schema manager
@@ -174,12 +176,12 @@ class TestRunMCPRemoteApp:
         stub = StubClient()
 
         with patch("tasak.mcp_remote_runner.MCPRemoteClient", new=lambda *a, **k: stub):
-            # Now help-style output is shown without exiting
             run_mcp_remote_app("test_app", app_config, [])
 
         captured = capsys.readouterr()
-        # Minimal listing with no tools produces empty output
-        assert captured.out.strip() == ""
+        out = captured.out.strip().splitlines()
+        assert out and out[0].startswith('"test_app" commands:')
+        assert any(line.startswith('"test_app" sub-apps:') for line in out)
 
     @patch("tasak.mcp_remote_runner.SchemaManager")
     def test_call_tool_with_arguments(self, mock_schema_manager_class, capsys):
