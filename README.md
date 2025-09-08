@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/jacekjursza/tasak.svg)](https://github.com/jacekjursza/tasak/releases/latest)
 
-📋 **[See what's new in v0.1.3 →](https://github.com/jacekjursza/TASAK/blob/v0.1.3/CHANGELOG.md#013---2025-09-08)**
+📋 **[See what's new in v0.1.4 →](https://github.com/jacekjursza/TASAK/blob/v0.1.4/CHANGELOG.md#014---2025-09-08)**
 
 ## 🚀 Why TASAK?
 

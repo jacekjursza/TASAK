@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-09-08
+### Added
+- New `docs` app type: navigate Markdown as commands (files) and sub-apps (folders)
+  - Recursive navigation with space-separated or colon shorthand (`a:b:c`)
+  - Include directives on a single line: `@path/to/file.md` (configurable via `meta.respect_include`)
+  - Exclusions via `meta.exclude` glob patterns (affects listing, navigation, and includes)
+  - Agent-friendly behavior: hide empty folders; flatten folder-only trees into `a:b[:c]`
+  - Output normalization: ensure a single trailing newline when printing files
+- CLI help harmonization across app types (MCP, MCP-Remote, Docs):
+  - Unified sections: `<app> commands` and `<app> sub-apps`
+  - Usage hints for immediate run and detailed help
+- App listing header updated: `📦 Available apps:`
+
+### Changed
+- `tasak <app>` behavior now falls back to grouped help unless there is exactly one command with no required params (then it runs immediately).
+
+### Docs
+- README: Replace “Three Modes of Power” with “Useful Node Types (App Types)” and add examples for all types, including `docs`.
+- basic_usage.md: Add “Docs Apps (Markdown Navigator)” section with configuration and usage.
+
 ### Added
 - Nothing yet
 
