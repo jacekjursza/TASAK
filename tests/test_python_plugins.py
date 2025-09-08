@@ -63,7 +63,7 @@ def test_plugin_discovery_and_listing_auto_enable(tmp_path, monkeypatch, capsys)
     tasak_main.main()
     out = capsys.readouterr().out
 
-    assert "Available applications:" in out
+    assert "Available apps:" in out or "Available applications:" in out
     assert "myplugin" in out
     assert "python-plugin" in out
 

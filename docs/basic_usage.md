@@ -35,10 +35,14 @@ This guide covers creating and using simple `cmd` apps - the foundation of TASAK
 
 ## Understanding App Types
 
-TASAK supports two app types:
+TASAK supports several app types:
 
-- **`cmd`**: Execute shell commands (this guide)
-- **`mcp`**: Run persistent MCP servers ([Advanced Usage](advanced_usage.md))
+- `cmd` — execute shell commands (this guide)
+- `docs` — navigate Markdown docs as commands/sub-apps (see below)
+- `mcp` — run local MCP servers ([Advanced Usage](advanced_usage.md))
+- `mcp-remote` — connect to remote MCP servers via proxy ([Advanced Usage](advanced_usage.md))
+- `curated` — composite workflows and structured interfaces ([Advanced Usage](advanced_usage.md))
+- `python-plugin` — Python-written plugins discovered from plugin dirs ([Advanced Usage](advanced_usage.md))
 
 ## Your First App
 
@@ -126,6 +130,47 @@ tasak my-workspace start
 ```
 
 For now, let's focus on simple `cmd` apps.
+
+## Docs Apps (Markdown Navigator)
+
+Docs apps expose a directory of Markdown files as a CLI that’s easy for agents:
+
+```yaml
+# ~/.tasak/tasak.yaml
+apps_config:
+  enabled_apps: [docsapp]
+
+docsapp:
+  name: "Project Docs"
+  type: "docs"
+  meta:
+    directory: "./docs"           # root of your docs
+    respect_include: true          # default; expand lines like @path/to/file.md
+    exclude:                       # optional glob patterns relative to root
+      - ".git/**"
+      - "**/_*.md"
+```
+
+Usage:
+```bash
+# List top-level docs (commands) and subfolders (sub-apps)
+tasak docsapp
+
+# Navigate (space-separated or colon shorthand)
+tasak docsapp guides deep
+tasak docsapp guides:deep
+
+# Open a Markdown file (extension optional)
+tasak docsapp guides intro
+
+# Include directive (in Markdown, as a separate line):
+# @.agent/AGENTS.md  -> inserts that file’s content
+```
+
+Behavior:
+- Empty folders are hidden; folders containing only folders are flattened in listings (e.g. `a:b:c`).
+- Outputs always end with a single trailing newline.
+- Excluded paths are silently omitted from listings; includes pointing to excluded files remain literal.
 
 ## Practical Examples
 
@@ -464,3 +509,9 @@ You've learned the basics of creating and using `cmd` apps. Ready for more?
 - Explore [Advanced Usage](advanced_usage.md) - Learn about MCP servers, authentication, and complex workflows
 - Check out example configurations in the repository
 - Share your custom apps with the community!
+To make a project self-contained and ignore higher-level configs (including `~/.tasak/tasak.yaml`), set isolation at that level:
+
+```yaml
+apps_config:
+  isolate: true  # Treat this file as the root; ignore parents
+```

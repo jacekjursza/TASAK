@@ -173,8 +173,11 @@ class TestRealApps:
                 assert e.code == 0
 
             captured = capsys.readouterr()
-            # Should list at least some apps
-            assert "Available applications:" in captured.out
+            # Should list at least some apps (header present)
+            assert (
+                "Available apps:" in captured.out
+                or "Available applications:" in captured.out
+            )
             # Check for some known apps from user's config
             assert "auth" in captured.out or "atlassian" in captured.out
 

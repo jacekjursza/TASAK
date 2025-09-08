@@ -53,13 +53,45 @@ def run_mcp_app(app_name: str, app_config: Dict[str, Any], app_args: List[str]):
         tool_defs = _get_tool_defs_for_list(app_name, app_config)
         # If still none, keep behavior when user tries to call a tool; for plain listing, show nothing
 
-    # Minimal listing (names only) when no arguments
+    # No arguments provided: global CLI rule
+    # - If exactly one tool exists and it has no required params → run it
+    # - Otherwise → show help (grouped)
     if not app_args:
-        if tool_defs:
-            for t in tool_defs:
-                name = t.get("name")
-                if name:
-                    print(name)
+        if not tool_defs:
+            show_simplified_app_help(app_name, tool_defs or [], app_type="mcp")
+            return
+
+        zero_arg_tools = []
+        for t in tool_defs:
+            schema = t.get("input_schema")
+            if schema is None:
+                # Missing schema → not eligible for auto-run (be conservative)
+                continue
+            required = (
+                (schema.get("required", []) or []) if isinstance(schema, dict) else []
+            )
+            if len(required) == 0:
+                zero_arg_tools.append(t)
+
+        if len(tool_defs) == 1 and len(zero_arg_tools) == 1:
+            # Run the single zero-arg tool
+            from .daemon.client import get_mcp_client
+
+            client = get_mcp_client(app_name, app_config)
+            only_tool = zero_arg_tools[0]["name"]
+            try:
+                result = client.call_tool(only_tool, {})
+                if isinstance(result, (dict, list)):
+                    print(json.dumps(result, indent=2))
+                else:
+                    print(result)
+            except Exception as e:
+                print(f"Error executing tool: {e}", file=sys.stderr)
+                sys.exit(1)
+            return
+
+        # Otherwise show simplified help
+        show_simplified_app_help(app_name, tool_defs or [], app_type="mcp")
         return
 
     # App-level simplified help

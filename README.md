@@ -2,11 +2,11 @@
 
 **Transform your AI coding assistant into a productivity powerhouse with custom tools and workflows tailored to YOUR codebase.**
 
-[![PyPI version](https://badge.fury.io/py/tasak.svg)](https://badge.fury.io/py/tasak)
+[![PyPI version](https://img.shields.io/pypi/v/tasak.svg)](https://pypi.org/project/tasak/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/jacekjursza/tasak.svg)](https://github.com/jacekjursza/tasak/releases/latest)
 
-📋 **[See what's new in v0.1.3 →](https://github.com/jacekjursza/TASAK/blob/v0.1.3/CHANGELOG.md#013---2025-09-08)**
+📋 **[See what's new in v0.1.4 →](https://github.com/jacekjursza/TASAK/blob/v0.1.4/CHANGELOG.md#014---2025-09-08)**
 
 ## 🚀 Why TASAK?
 
@@ -74,41 +74,73 @@ Your AI agent can write its own tools! Just ask:
 
 The agent writes the Python function, TASAK automatically loads it. Mind = blown. 🤯
 
-### 🎭 **Three Modes of Power**
+### 🧱 Useful Node Types (App Types)
 
-**`cmd` apps** - Quick & dirty commands
-```yaml
-format_code:
-  type: cmd
-  meta:
-    command: "ruff format . && ruff check --fix"
-```
+TASAK exposes your tools as app “nodes” your agent can navigate. The most useful types:
 
-**`mcp` apps** - Stateful AI-native services
-```yaml
-database:
-  type: mcp
-  meta:
-    command: "uvx mcp-server-sqlite --db ./app.db"
-```
+- `cmd` — quick shell commands
+  ```yaml
+  format_code:
+    type: cmd
+    meta:
+      command: "ruff format . && ruff check --fix"
+  ```
 
-**`curated` apps** - Orchestrated workflows
-```yaml
-full_deploy:
-  type: curated
-  commands:
-    - test
-    - build
-    - deploy
-    - notify_slack
-```
+- `docs` — Markdown navigator (commands = .md files; sub‑apps = folders)
+  ```yaml
+  docs:
+    type: docs
+    meta:
+      directory: "./docs"
+      respect_include: true
+  ```
+
+- `mcp` — local MCP server (stateful, AI‑native)
+  ```yaml
+  database:
+    type: mcp
+    meta:
+      command: "uvx mcp-server-sqlite --db ./app.db"
+  ```
+
+- `mcp-remote` — remote MCP via proxy (OAuth, SSE)
+  ```yaml
+  atlassian:
+    type: mcp-remote
+    meta:
+      server_url: "https://mcp.atlassian.com/v1/sse"
+  ```
+
+- `curated` — orchestrated workflows (compose multiple steps/tools)
+  ```yaml
+  full_deploy:
+    type: curated
+    commands:
+      - test
+      - build
+      - deploy
+      - notify_slack
+  ```
+
+- `python-plugin` — Python‑written plugins discovered from plugin dirs
+  ```yaml
+  # auto‑discovered; enable via plugins.python settings
+  ```
+
+See all node/app types and details → docs/basic_usage.md#understanding-app-types
 
 ### 🔄 **Hierarchical Config**
-Global tools + project tools = perfect setup
+Global tools + project tools = perfect setup (with optional isolation)
 ```
 ~/.tasak/tasak.yaml       # Your personal toolkit
 ./project/tasak.yaml      # Project-specific tools
 = Your AI has exactly what it needs
+```
+
+Tip: To stop inheriting from parents/global at a given level, set:
+```yaml
+apps_config:
+  isolate: true  # Ignore all higher configs above this file
 ```
 
 ## ⚡ Quick Start
@@ -284,19 +316,21 @@ def smart_refactor(file_pattern: str, old_name: str, new_name: str):
 
 ## 🤖 CLI Semantics for Agents
 
-For MCP and MCP‑Remote apps, TASAK presents a predictable, agent‑friendly CLI:
+Agent‑friendly defaults across app types:
 
-- `tasak <app>` → prints only tool names (one per line). No headers or descriptions.
-- `tasak <app> <tool>` →
-  - If the tool has no required parameters: executes immediately with empty args.
-  - If the tool has required parameters: shows focused help for that tool (same as `--help`), including description and parameters with required/type info.
-- `tasak <app> <tool> --help` → always shows focused help for that single tool.
-- `tasak <app> --help` → prints grouped simplified help:
-  - "<app> commands:" — tools without required params (can run immediately) as `<name> - <description>`
-  - "<app> sub-apps (use --help to read more):" — tools with required params as `<name> - <description>`
+- `tasak <app>` →
+  - If the app exposes exactly one command with no required params: runs it immediately.
+  - Otherwise: shows grouped simplified help with sections "<app> commands:" and "<app> sub-apps:".
+- `tasak <app> <command>` →
+  - If the command has no required parameters: executes immediately.
+  - If it has required parameters: shows focused help for that command (same as `--help`).
+- `tasak <app> <command> --help` → focused help for that single command.
+- For docs apps:
+  - Navigate: `tasak <docs-app> <subdir> [subdir...]` or shorthand `tasak <docs-app> a:b[:c]`
+  - Open files: `tasak <docs-app> <sub-app...> <command>` (extension optional)
 
 Behavior notes:
-- Tool schema listing/help uses a transparent 1‑day cache; when stale or missing, TASAK refreshes quietly and updates the cache.
+- Tool schema listing/help uses a transparent cache and refreshes quietly when stale or missing.
 - Noisy transport logs are suppressed by default; enable with `TASAK_DEBUG=1` or `TASAK_VERBOSE=1` if you need to debug.
 
 ## Daemon (Connection Pooling)

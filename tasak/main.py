@@ -11,6 +11,7 @@ from tasak.python_plugins import integrate_plugins_into_config, run_python_plugi
 from tasak.curated_app import run_curated_app
 from tasak.mcp_client import run_mcp_app
 from tasak.mcp_remote_runner import run_mcp_remote_app
+from tasak.docs_app import run_docs_app
 from tasak.init_command import handle_init_command
 
 
@@ -295,6 +296,8 @@ def main():
         run_mcp_remote_app(app_name, app_config, unknown_args)
     elif app_type == "python-plugin":
         run_python_plugin(app_name, app_config, unknown_args)
+    elif app_type == "docs":
+        run_docs_app(app_name, app_config, unknown_args)
     else:
         print(
             f"Error: Unknown app type '{app_type}' for app '{app_name}'.",
@@ -319,7 +322,7 @@ def _list_available_apps(config: Dict[str, Any], simple: bool = False):
     print("=" * 50)
 
     # Always show the section header so helpers can rely on it
-    print("\n📦 Available applications:")
+    print("\n📦 Available apps:")
 
     if not enabled_apps:
         # No apps configured: show friendly guidance and an example

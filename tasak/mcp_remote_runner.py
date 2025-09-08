@@ -72,12 +72,45 @@ def run_mcp_remote_app(app_name: str, app_config: Dict[str, Any], app_args: List
     # Always resolve tool definitions for help/validation below (with 1-day TTL)
     tool_defs = _get_tool_defs_for_help(app_name, app_config)
 
-    # If no tool provided, show minimal list of methods only
+    # If no arguments provided, follow global CLI rule:
+    # - If the app can run without additional arguments (exactly one zero-arg tool), run it
+    # - Otherwise, fall back to help
     if not app_args:
-        for t in tool_defs or []:
-            name = t.get("name")
-            if name:
-                print(name)
+        # No schema available → show help
+        if not tool_defs:
+            show_simplified_app_help(app_name, tool_defs or [], app_type="mcp-remote")
+            return
+
+        # Identify tools explicitly marked with no required parameters
+        zero_arg_tools = []
+        for t in tool_defs:
+            schema = t.get("input_schema")
+            if schema is None:
+                # Missing schema → not eligible for auto-run (be conservative)
+                continue
+            required = (
+                (schema.get("required", []) or []) if isinstance(schema, dict) else []
+            )
+            if len(required) == 0:
+                zero_arg_tools.append(t)
+
+        if len(tool_defs) == 1 and len(zero_arg_tools) == 1:
+            # Single tool with no required params → run it
+            only_tool = zero_arg_tools[0]["name"]
+            client = MCPRemoteClient(app_name, app_config)
+            try:
+                result = client.call_tool(only_tool, {})
+                if isinstance(result, (dict, list)):
+                    print(json.dumps(result))
+                else:
+                    print(result)
+            except Exception as e:
+                print(f"Error executing tool: {e}", file=sys.stderr)
+                sys.exit(1)
+            return
+
+        # Otherwise, show grouped simplified help
+        show_simplified_app_help(app_name, tool_defs or [], app_type="mcp-remote")
         return
 
     # Parse tool invocation

@@ -62,20 +62,43 @@ def load_and_merge_configs() -> dict:
     # If no env var, proceed with the original logic
     merged_config = {}
 
-    # 2. Load global config
+    # 2. Load global config (may be ignored later if isolation applies)
     global_config_path = get_global_config_path()
+    global_config = None
     if global_config_path:
         with open(global_config_path, "r") as f:
             global_config = yaml.safe_load(f)
-            if global_config:
-                merged_config.update(global_config)
 
-    # 3. Load and merge local configs
-    local_config_paths = find_local_config_paths()
-    for path in local_config_paths:
-        with open(path, "r") as f:
-            local_config = yaml.safe_load(f)
-            if local_config:
-                merged_config.update(local_config)
+    # 3. Discover local configs and apply isolation semantics
+    local_config_paths = find_local_config_paths()  # ordered from root -> cwd
+
+    # Detect nearest isolation flag scanning from cwd backwards
+    isolate_index: int | None = None
+    for idx in range(len(local_config_paths) - 1, -1, -1):
+        p = local_config_paths[idx]
+        with open(p, "r") as f:
+            data = yaml.safe_load(f) or {}
+        apps_cfg = data.get("apps_config", {}) or {}
+        if bool(apps_cfg.get("isolate", False)):
+            isolate_index = idx
+            break
+
+    # Merge respecting isolation
+    if isolate_index is None:
+        # No isolation: include global then local (root -> cwd)
+        if global_config:
+            merged_config.update(global_config)
+        for path in local_config_paths:
+            with open(path, "r") as f:
+                local_config = yaml.safe_load(f)
+                if local_config:
+                    merged_config.update(local_config)
+    else:
+        # Isolation found at local_config_paths[isolate_index]: ignore global and any parents above
+        for path in local_config_paths[isolate_index:]:
+            with open(path, "r") as f:
+                local_config = yaml.safe_load(f)
+                if local_config:
+                    merged_config.update(local_config)
 
     return merged_config

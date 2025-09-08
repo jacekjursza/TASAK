@@ -392,8 +392,16 @@ def show_simplified_app_help(
             replace_whitespace=True,
         )
         print(wrapped_names)
-        # Show a concise hint for detailed help (dynamic binary name)
-        binary = _get_binary_name()
-        print(f"\nUse: {binary} {app_name} <sub-app> --help  # Details for that tool")
     else:
         print("  (none)")
+
+    # Usage hints (consistent with docs app style)
+    binary = _get_binary_name()
+    # Immediate run hints for commands
+    if commands:
+        print(
+            f"\nRun: {binary} {app_name} <command>            # Runs immediately (no params)"
+        )
+    # Details for sub-apps
+    if subapps:
+        print(f"Use: {binary} {app_name} <sub-app> --help   # Details and parameters")

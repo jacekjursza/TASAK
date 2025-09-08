@@ -51,7 +51,7 @@ def is_daemon_running() -> bool:
     try:
         response = requests.get(f"{DAEMON_URL}/health", timeout=1)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
