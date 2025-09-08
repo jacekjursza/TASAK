@@ -26,10 +26,8 @@ class TestCleanupPool:
 
     def test_cleanup_pool_error_ignored(self):
         """Test that errors during cleanup are ignored."""
-        import concurrent.futures as cf
 
         fake_inst = MagicMock()
-        fut = cf.Future()
 
         # Make future raise when awaited
         def _raise():

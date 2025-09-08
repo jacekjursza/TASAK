@@ -181,12 +181,7 @@ async def list_tools(app_name: str, config: Dict[str, Any] = None):
 
     except Exception as e:
         logger.error(f"[tools] error listing tools for {app_name}: {e}")
-        # Increment error metric if we have a connection object partially
-        try:
-            if "conn" in locals() and conn:
-                conn.error_count += 1
-        except Exception:
-            pass
+        # Metrics are tracked in the core manager; respond with HTTP 500
         raise HTTPException(status_code=500, detail=str(e))
 
 

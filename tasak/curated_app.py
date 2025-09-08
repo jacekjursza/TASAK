@@ -13,6 +13,7 @@ import sys
 from typing import Any, Dict, List
 from dataclasses import dataclass
 
+from .config import load_and_merge_configs
 from .mcp_real_client import MCPRealClient
 from .core.tool_service import ToolService
 from typing import Optional
@@ -44,7 +45,6 @@ class CuratedMCPRemoteShim:
 
 # Export compatibility symbol for tests; points to shim by default
 MCPRemoteClient = CuratedMCPRemoteShim
-from .config import load_and_merge_configs
 
 
 @dataclass
