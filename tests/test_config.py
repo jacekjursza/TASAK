@@ -137,6 +137,78 @@ class TestLoadAndMergeConfigs:
                 result = load_and_merge_configs()
                 assert result == {}
 
+    def test_isolate_in_mid_level_stops_bubbling(self, tmp_path):
+        """apps_config.isolate at a mid-level local config ignores parents and global."""
+        # Structure: /root -> /root/project -> /root/project/subdir (cwd)
+        root = tmp_path / "root"
+        project = root / "project"
+        subdir = project / "subdir"
+        subdir.mkdir(parents=True)
+
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        # Global config
+        gfile = mock_home / ".tasak" / "tasak.yaml"
+        gfile.parent.mkdir(parents=True)
+        gfile.write_text(yaml.dump({"header": "Global", "from_global": True}))
+
+        # Root config (would normally apply)
+        (root / "tasak.yaml").write_text(
+            yaml.dump({"header": "Root", "from_root": True})
+        )
+
+        # Project config with isolate
+        (project / "tasak.yaml").write_text(
+            yaml.dump(
+                {
+                    "header": "Project",
+                    "apps_config": {"isolate": True},
+                    "from_project": True,
+                }
+            )
+        )
+
+        # Deeper config in subdir
+        (subdir / "tasak.yaml").write_text(yaml.dump({"from_subdir": True}))
+
+        with patch("pathlib.Path.cwd", return_value=subdir):
+            with patch("pathlib.Path.home", return_value=mock_home):
+                result = load_and_merge_configs()
+
+        # Isolation should cause merge to start at project level (ignore global and root)
+        assert result["header"] == "Project"
+        assert result.get("from_global") is None
+        assert result.get("from_root") is None
+        # But subdir should still merge on top
+        assert result.get("from_project") is True
+        assert result.get("from_subdir") is True
+
+    def test_isolate_in_cwd_ignores_all_ancestors(self, tmp_path):
+        """apps_config.isolate in current dir ignores all parents and global."""
+        work = tmp_path / "work"
+        parent = work / "parent"
+        cwd = parent / "here"
+        cwd.mkdir(parents=True)
+
+        mock_home = tmp_path / "home"
+        (mock_home / ".tasak").mkdir(parents=True)
+        (mock_home / ".tasak" / "tasak.yaml").write_text(
+            yaml.dump({"from_global": True})
+        )
+
+        (work / "tasak.yaml").write_text(yaml.dump({"from_work": True}))
+        (parent / "tasak.yaml").write_text(yaml.dump({"from_parent": True}))
+        (cwd / "tasak.yaml").write_text(
+            yaml.dump({"apps_config": {"isolate": True}, "from_cwd": True})
+        )
+
+        with patch("pathlib.Path.cwd", return_value=cwd):
+            with patch("pathlib.Path.home", return_value=mock_home):
+                result = load_and_merge_configs()
+
+        assert result == {"apps_config": {"isolate": True}, "from_cwd": True}
+
     def test_global_config_only(self, tmp_path):
         """Test with only global config."""
         work_dir = tmp_path / "project"

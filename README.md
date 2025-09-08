@@ -130,11 +130,17 @@ TASAK exposes your tools as app “nodes” your agent can navigate. The most us
 See all node/app types and details → docs/basic_usage.md#understanding-app-types
 
 ### 🔄 **Hierarchical Config**
-Global tools + project tools = perfect setup
+Global tools + project tools = perfect setup (with optional isolation)
 ```
 ~/.tasak/tasak.yaml       # Your personal toolkit
 ./project/tasak.yaml      # Project-specific tools
 = Your AI has exactly what it needs
+```
+
+Tip: To stop inheriting from parents/global at a given level, set:
+```yaml
+apps_config:
+  isolate: true  # Ignore all higher configs above this file
 ```
 
 ## ⚡ Quick Start

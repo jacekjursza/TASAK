@@ -509,3 +509,9 @@ You've learned the basics of creating and using `cmd` apps. Ready for more?
 - Explore [Advanced Usage](advanced_usage.md) - Learn about MCP servers, authentication, and complex workflows
 - Check out example configurations in the repository
 - Share your custom apps with the community!
+To make a project self-contained and ignore higher-level configs (including `~/.tasak/tasak.yaml`), set isolation at that level:
+
+```yaml
+apps_config:
+  isolate: true  # Treat this file as the root; ignore parents
+```
